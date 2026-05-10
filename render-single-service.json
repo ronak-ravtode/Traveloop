@@ -1,0 +1,17 @@
+{
+  "services": [
+    {
+      "name": "traveloop",
+      "type": "web",
+      "env": "node",
+      "repo": "https://github.com/yourusername/traveloop.git",
+      "rootDir": "server",
+      "buildCommand": "cd ../client && npm install && npm run build && cd ../server && npm install",
+      "startCommand": "npm start",
+      "envVars": {
+        "NODE_ENV": "production",
+        "PORT": "10000"
+      }
+    }
+  ]
+}
