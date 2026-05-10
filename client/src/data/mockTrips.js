@@ -95,6 +95,61 @@ export const mockTrips = [
     createdAt: '2024-02-20T12:00:00Z',
     updatedAt: '2024-03-10T20:00:00Z',
   },
+  {
+    id: '4',
+    userId: 'user1',
+    title: 'Southeast Asia Explorer',
+    description: 'Three-week adventure through Bangkok, Singapore, and Bali',
+    coverImage: 'https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=800&h=400&fit=crop',
+    status: 'upcoming',
+    isPublic: true,
+    shareCode: 'SEA2024',
+    startDate: '2024-11-01',
+    endDate: '2024-11-21',
+    cities: [
+      { cityId: '11', city: mockCities[10], startDate: '2024-11-01', endDate: '2024-11-06', order: 1 },
+      { cityId: '15', city: mockCities[14], startDate: '2024-11-06', endDate: '2024-11-11', order: 2 },
+      { cityId: '5', city: mockCities[4], startDate: '2024-11-11', endDate: '2024-11-21', order: 3 },
+    ],
+    activities: [
+      { activityId: '34', activity: mockActivities[33], cityId: '11', date: '2024-11-02', time: '18:00', notes: 'Book food tour in advance' },
+      { activityId: '35', activity: mockActivities[34], cityId: '11', date: '2024-11-03', time: '09:00', notes: 'Dress code required - cover shoulders and knees' },
+      { activityId: '31', activity: mockActivities[30], cityId: '15', date: '2024-11-07', time: '19:00', notes: 'Sunset slot recommended' },
+      { activityId: '32', activity: mockActivities[31], cityId: '15', date: '2024-11-08', time: '17:00', notes: 'Come hungry!' },
+      { activityId: '9', activity: mockActivities[8], cityId: '5', date: '2024-11-15', time: '17:30', notes: 'Best sunset photography spot' },
+      { activityId: '17', activity: mockActivities[16], cityId: '5', date: '2024-11-12', time: '08:00', notes: 'Wear comfortable shoes' },
+    ],
+    budget: {
+      total: 5000,
+      spent: 0,
+      categories: {
+        flights: 1500,
+        accommodation: 1800,
+        food: 600,
+        activities: 350,
+        transport: 250,
+        other: 500
+      }
+    },
+    packingList: [
+      { id: 'p8', name: 'Passport', packed: false, category: 'documents' },
+      { id: 'p9', name: 'Travel insurance', packed: false, category: 'documents' },
+      { id: 'p10', name: 'Light breathable clothing', packed: false, category: 'clothing' },
+      { id: 'p11', name: 'Rain jacket', packed: false, category: 'clothing' },
+      { id: 'p12', name: 'Sunscreen SPF 50', packed: false, category: 'toiletries' },
+      { id: 'p13', name: 'Insect repellent', packed: false, category: 'toiletries' },
+      { id: 'p14', name: 'Power adapter (Type G/M)', packed: false, category: 'electronics' },
+      { id: 'p15', name: 'Universal travel adapter', packed: false, category: 'electronics' },
+      { id: 'p16', name: 'Camera', packed: false, category: 'electronics' },
+      { id: 'p17', name: 'Cash (USD for exchange)', packed: false, category: 'money' },
+    ],
+    notes: [
+      { id: 'n4', date: '2024-10-01', content: 'Book flights early for best prices. November is shoulder season - good deals available.', city: null },
+      { id: 'n5', date: '2024-10-05', content: 'Get Thai visa on arrival ready. Bring passport photo.', city: 'Bangkok' },
+    ],
+    createdAt: '2024-10-01T10:00:00Z',
+    updatedAt: '2024-10-05T14:30:00Z',
+  },
 ];
 
 export const getTripById = (id) => mockTrips.find(trip => trip.id === id);

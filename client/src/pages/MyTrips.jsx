@@ -1,67 +1,162 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Filter, Compass } from 'lucide-react';
-import TripCard from '../components/trip/TripCard';
-import { mockTrips } from '../data/mockTrips';
+import { Plus, Search, Compass, Filter, X } from 'lucide-react';
+import TripListCard from '../components/trip/TripListCard';
+import { tripService } from '../data/mockTripService';
 
 const MyTrips = () => {
+  const [trips, setTrips] = useState([]);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
-  const filters = ['all', 'upcoming', 'planning', 'ongoing', 'completed'];
+  // Load trips from service
+  useEffect(() => {
+    const loadTrips = () => {
+      const allTrips = tripService.getAll();
+      setTrips(allTrips);
+      setIsLoading(false);
+    };
+    loadTrips();
+  }, []);
 
-  const filteredTrips = mockTrips.filter(trip => {
+  // Filter trips based on search and status
+  const filteredTrips = trips.filter(trip => {
     const matchesFilter = filter === 'all' || trip.status === filter;
     const matchesSearch = trip.title.toLowerCase().includes(search.toLowerCase()) ||
       trip.description.toLowerCase().includes(search.toLowerCase());
     return matchesFilter && matchesSearch;
   });
 
+  // Handle delete
+  const handleDelete = (tripId) => {
+    const success = tripService.delete(tripId);
+    if (success) {
+      setTrips(tripService.getAll());
+    }
+  };
+
+  // Clear filters
+  const clearFilters = () => {
+    setSearch('');
+    setFilter('all');
+  };
+
+  const hasFilters = search || filter !== 'all';
+  const activeFilter = filter !== 'all' ? filter : null;
+
+  const filters = [
+    { value: 'all', label: 'All' },
+    { value: 'planning', label: 'Planning' },
+    { value: 'upcoming', label: 'Upcoming' },
+    { value: 'ongoing', label: 'Ongoing' },
+    { value: 'completed', label: 'Completed' },
+  ];
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-display font-bold text-dark">My Trips</h1>
-          <p className="text-dark-lighter/60 mt-1">Manage and plan your travel adventures</p>
+          <p className="text-dark-lighter/60 mt-1">
+            {trips.length} {trips.length === 1 ? 'trip' : 'trips'} total
+          </p>
         </div>
         <Link to="/trips/create" className="btn-primary">
           <Plus className="w-5 h-5" />
-          New Trip
+          Create New Trip
         </Link>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-4">
-        <div className="flex-1 relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-lighter/40" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search trips..."
-            className="input-field pl-12"
-          />
+      {/* Search and Filters */}
+      <div className="card p-4 space-y-4">
+        <div className="flex flex-col md:flex-row gap-4">
+          {/* Search Input */}
+          <div className="flex-1 relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-lighter/40" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search trips by name..."
+              className="input-field pl-12 pr-10"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-dark-lighter/10 rounded-lg"
+              >
+                <X className="w-4 h-4 text-dark-lighter/40" />
+              </button>
+            )}
+          </div>
         </div>
-        <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0">
+
+        {/* Filter Tags */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-dark-lighter/60 flex items-center gap-1.5">
+            <Filter className="w-4 h-4" />
+            Filter by status:
+          </span>
           {filters.map(f => (
             <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all ${
-                filter === f
+              key={f.value}
+              onClick={() => setFilter(f.value)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                filter === f.value
                   ? 'bg-primary text-white'
-                  : 'bg-white text-dark-lighter hover:bg-surface-alt'
+                  : 'bg-surface-alt text-dark-lighter hover:bg-dark-lighter/10'
               }`}
             >
-              {f.charAt(0).toUpperCase() + f.slice(1)}
+              {f.label}
             </button>
           ))}
         </div>
       </div>
 
+      {/* Active Filter Indicator */}
+      {hasFilters && (
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-dark-lighter/60">Showing results for:</span>
+          {search && (
+            <span className="badge bg-primary/10 text-primary flex items-center gap-1">
+              Search: "{search}"
+              <button onClick={() => setSearch('')}>
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+          {activeFilter && (
+            <span className="badge bg-secondary/10 text-secondary flex items-center gap-1">
+              Status: {activeFilter}
+              <button onClick={() => setFilter('all')}>
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+          <button
+            onClick={clearFilters}
+            className="text-sm text-red-500 hover:text-red-600"
+          >
+            Clear all
+          </button>
+        </div>
+      )}
+
+      {/* Trip Grid or Empty State */}
       {filteredTrips.length > 0 ? (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredTrips.map(trip => (
-            <TripCard key={trip.id} trip={trip} />
+            <TripListCard key={trip.id} trip={trip} onDelete={handleDelete} />
           ))}
         </div>
       ) : (
@@ -69,14 +164,24 @@ const MyTrips = () => {
           <div className="w-16 h-16 bg-surface-alt rounded-2xl flex items-center justify-center mx-auto mb-4">
             <Compass className="w-8 h-8 text-dark-lighter/30" />
           </div>
-          <h3 className="font-display font-semibold text-dark mb-2">No trips found</h3>
+          <h3 className="font-display font-semibold text-dark mb-2">
+            {hasFilters ? 'No trips match your filters' : 'No trips yet'}
+          </h3>
           <p className="text-sm text-dark-lighter/60 mb-6">
-            {search ? 'Try adjusting your search' : 'Start planning your next adventure!'}
+            {hasFilters
+              ? 'Try adjusting your search or filter criteria'
+              : 'Start planning your first adventure!'}
           </p>
-          <Link to="/trips/create" className="btn-primary">
-            <Plus className="w-5 h-5" />
-            Create Trip
-          </Link>
+          {hasFilters ? (
+            <button onClick={clearFilters} className="btn-secondary">
+              Clear Filters
+            </button>
+          ) : (
+            <Link to="/trips/create" className="btn-primary">
+              <Plus className="w-5 h-5" />
+              Create New Trip
+            </Link>
+          )}
         </div>
       )}
     </div>

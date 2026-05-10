@@ -1,15 +1,15 @@
 import { Link } from 'react-router-dom';
 import { PlaneTakeoff, Calendar, MapPin, Wallet, Plus, ArrowRight, Compass, Star, TrendingUp } from 'lucide-react';
 import TripCard from '../components/trip/TripCard';
-import { mockTrips } from '../data/mockTrips';
+import { tripService } from '../data/mockTripService';
 import { mockCities } from '../data/mockCities';
 import { useAuth } from '../context/AuthContext';
 
 const Dashboard = () => {
   const { user } = useAuth();
 
-  // Calculate stats from mockTrips
-  const userTrips = mockTrips.filter(trip => trip.userId === 'user1');
+  // Calculate stats from tripService
+  const userTrips = tripService.getAll().filter(trip => trip.userId === 'user1');
   const upcomingTrips = userTrips.filter(t => t.status === 'upcoming' || t.status === 'planning');
   const totalCitiesPlanned = userTrips.reduce((sum, trip) => sum + trip.cities.length, 0);
   const estimatedTotalBudget = userTrips.reduce((sum, trip) => sum + (trip.budget?.total || 0), 0);

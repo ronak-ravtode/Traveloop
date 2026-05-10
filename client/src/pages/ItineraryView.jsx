@@ -1,135 +1,404 @@
-import { useParams, Link } from 'react-router-dom';
-import { MapPin, Calendar, DollarSign, Users, Share2, Edit, ArrowLeft, Clock } from 'lucide-react';
-import { getTripById } from '../data/mockTrips';
-import { mockTrips } from '../data/mockTrips';
+import { useState, useEffect } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import {
+  MapPin, Calendar, DollarSign, Share2, Edit, ArrowLeft, Clock,
+  LayoutList, Grid3X3, Plane, Ticket, Utensils, Camera, Landmark, Sun, Sparkles, StickyNote
+} from 'lucide-react';
+import { tripService } from '../data/mockTripService';
+
+const categoryIcons = {
+  sightseeing: Landmark,
+  cultural: Camera,
+  museum: Landmark,
+  outdoor: Sun,
+  water: Sun,
+  historical: Landmark,
+  food: Utensils,
+  entertainment: Ticket,
+};
 
 const ItineraryView = () => {
   const { tripId } = useParams();
-  const trip = mockTrips.find(t => t.id === tripId) || getTripById('1');
+  const navigate = useNavigate();
+  const [trip, setTrip] = useState(null);
+  const [viewMode, setViewMode] = useState('timeline');
+
+  useEffect(() => {
+    const foundTrip = tripService.getById(tripId);
+    if (foundTrip) {
+      setTrip(foundTrip);
+    } else {
+      navigate('/trips');
+    }
+  }, [tripId, navigate]);
 
   const formatDate = (date) => new Date(date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
+  const formatFullDate = (date) => new Date(date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+  const getDuration = () => {
+    if (!trip?.startDate || !trip?.endDate) return 0;
+    return Math.ceil((new Date(trip.endDate) - new Date(trip.startDate)) / (1000 * 60 * 60 * 24)) + 1;
+  };
+
+  const handleShare = () => {
+    if (trip?.shareCode) {
+      navigator.clipboard.writeText(`${window.location.origin}/shared/${trip.shareCode}`);
+      alert('Share link copied to clipboard!');
+    } else {
+      alert('This trip is not public. Make it public to share.');
+    }
+  };
+
+  // Get all activities organized by day
+  const getTimelineData = () => {
+    if (!trip) return [];
+    const days = {};
+    trip.activities.forEach(act => {
+      if (!days[act.date]) {
+        const city = trip.cities.find(c => c.cityId === act.cityId);
+        days[act.date] = { date: act.date, city, activities: [] };
+      }
+      days[act.date].activities.push(act);
+    });
+    return Object.entries(days).sort(([a], [b]) => new Date(a) - new Date(b)).map(([date, data]) => ({
+      dayNum: Math.ceil((new Date(date) - new Date(trip.startDate)) / (1000 * 60 * 60 * 24)) + 1,
+      ...data,
+    }));
+  };
+
+  // Get activities grouped by city
+  const getCityGroupData = () => {
+    if (!trip) return [];
+    return trip.cities.map(cityStop => {
+      const cityActivities = trip.activities.filter(act => act.cityId === cityStop.cityId);
+      return {
+        city: cityStop.city,
+        dates: `${formatDate(cityStop.startDate)} - ${formatDate(cityStop.endDate)}`,
+        activities: cityActivities,
+      };
+    });
+  };
+
+  if (!trip) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  const timelineData = getTimelineData();
+  const cityGroupData = getCityGroupData();
+  const totalActivityCost = trip.activities.reduce((sum, a) => sum + (a.activity?.cost || 0), 0);
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Link to="/trips" className="btn-ghost -ml-2">
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-        <div className="flex-1">
-          <h1 className="text-2xl md:text-3xl font-display font-bold text-dark">{trip.title}</h1>
-          <p className="text-dark-lighter/60">{trip.description}</p>
-        </div>
-        <div className="flex gap-2">
-          <Link to={`/trips/${tripId}/edit`} className="btn-secondary">
-            <Edit className="w-5 h-5" />
-            <span className="hidden sm:inline">Edit</span>
+      {/* Header */}
+      <div className="flex flex-col lg:flex-row lg:items-start gap-4">
+        <div className="flex items-start gap-4 flex-1">
+          <Link to="/trips" className="btn-ghost -ml-2 mt-1">
+            <ArrowLeft className="w-5 h-5" />
           </Link>
-          <button className="btn-primary">
-            <Share2 className="w-5 h-5" />
-            <span className="hidden sm:inline">Share</span>
+          <div className="flex-1">
+            <div className="flex items-center gap-3 mb-2">
+              <span className={`badge ${trip.status === 'upcoming' ? 'bg-primary/10 text-primary' : trip.status === 'completed' ? 'bg-gray-100 text-gray-600' : 'bg-amber-100 text-amber-700'}`}>
+                {trip.status}
+              </span>
+              {trip.isPublic && <span className="badge bg-green-50 text-green-600"><Share2 className="w-3 h-3 mr-1" />Public</span>}
+            </div>
+            <h1 className="text-2xl md:text-3xl font-display font-bold text-dark">{trip.title}</h1>
+            <p className="text-dark-lighter/60 mt-1">{trip.description}</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link to={`/trips/${tripId}/edit`} className="btn-secondary">
+            <Edit className="w-4 h-4" />
+            Edit Itinerary
+          </Link>
+          <Link to={`/trips/${tripId}/budget`} className="btn-secondary">
+            <DollarSign className="w-4 h-4" />
+            View Budget
+          </Link>
+          <Link to={`/trips/${tripId}/notes`} className="btn-secondary">
+            <StickyNote className="w-4 h-4" />
+            Notes
+          </Link>
+          <button onClick={handleShare} className="btn-primary">
+            <Share2 className="w-4 h-4" />
+            Share Trip
           </button>
         </div>
       </div>
 
-      <div className="grid md:grid-cols-4 gap-4">
-        <div className="card p-4">
+      {/* Trip Cover & Stats */}
+      <div className="relative h-48 md:h-64 rounded-3xl overflow-hidden">
+        <img src={trip.coverImage} alt={trip.title} className="w-full h-full object-cover" />
+        <div className="absolute inset-0 bg-gradient-to-t from-dark/80 via-dark/40 to-transparent" />
+        <div className="absolute bottom-0 left-0 right-0 p-6 md:p-8">
+          <div className="flex flex-wrap items-center gap-4 text-white/90">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-5 h-5" />
+              <span>{formatDate(trip.startDate)} - {formatDate(trip.endDate)}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Plane className="w-5 h-5" />
+              <span>{getDuration()} days</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <MapPin className="w-5 h-5" />
+              <span>{trip.cities.length} cities</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Ticket className="w-5 h-5" />
+              <span>{trip.activities.length} activities</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="card p-4 hover:shadow-md transition-shadow">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
-              <Calendar className="w-5 h-5 text-primary" />
+            <div className="w-12 h-12 bg-gradient-to-br from-primary to-teal-600 rounded-2xl flex items-center justify-center">
+              <Calendar className="w-6 h-6 text-white" />
             </div>
             <div>
               <p className="text-xs text-dark-lighter/60">Duration</p>
-              <p className="font-semibold text-dark">
-                {Math.ceil((new Date(trip.endDate) - new Date(trip.startDate)) / (1000 * 60 * 60 * 24))} days
-              </p>
+              <p className="text-xl font-display font-bold text-dark">{getDuration()} days</p>
             </div>
           </div>
         </div>
-        <div className="card p-4">
+        <div className="card p-4 hover:shadow-md transition-shadow">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-secondary/10 rounded-xl flex items-center justify-center">
-              <MapPin className="w-5 h-5 text-secondary" />
+            <div className="w-12 h-12 bg-gradient-to-br from-secondary to-orange-500 rounded-2xl flex items-center justify-center">
+              <MapPin className="w-6 h-6 text-white" />
             </div>
             <div>
-              <p className="text-xs text-dark-lighter/60">Cities</p>
-              <p className="font-semibold text-dark">{trip.cities.length}</p>
+              <p className="text-xs text-dark-lighter/60">Destinations</p>
+              <p className="text-xl font-display font-bold text-dark">{trip.cities.length}</p>
             </div>
           </div>
         </div>
-        <div className="card p-4">
+        <div className="card p-4 hover:shadow-md transition-shadow">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-accent/10 rounded-xl flex items-center justify-center">
-              <DollarSign className="w-5 h-5 text-accent" />
-            </div>
-            <div>
-              <p className="text-xs text-dark-lighter/60">Budget</p>
-              <p className="font-semibold text-dark">${trip.budget.total.toLocaleString()}</p>
-            </div>
-          </div>
-        </div>
-        <div className="card p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center">
-              <Clock className="w-5 h-5 text-green-600" />
+            <div className="w-12 h-12 bg-gradient-to-br from-accent to-yellow-500 rounded-2xl flex items-center justify-center">
+              <Ticket className="w-6 h-6 text-white" />
             </div>
             <div>
               <p className="text-xs text-dark-lighter/60">Activities</p>
-              <p className="font-semibold text-dark">{trip.activities.length}</p>
+              <p className="text-xl font-display font-bold text-dark">{trip.activities.length}</p>
+            </div>
+          </div>
+        </div>
+        <div className="card p-4 hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center">
+              <DollarSign className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <p className="text-xs text-dark-lighter/60">Total Budget</p>
+              <p className="text-xl font-display font-bold text-dark">${trip.budget.total.toLocaleString()}</p>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="card overflow-hidden">
-        <div className="p-4 border-b border-dark-lighter/10">
-          <div className="flex items-center justify-between">
-            <h2 className="font-display font-semibold text-dark">Cities & Dates</h2>
-            <div className="flex gap-2">
-              <Link to={`/trips/${tripId}/budget`} className="btn-ghost text-xs py-1.5">Budget</Link>
-              <Link to={`/trips/${tripId}/packing`} className="btn-ghost text-xs py-1.5">Packing</Link>
-              <Link to={`/trips/${tripId}/notes`} className="btn-ghost text-xs py-1.5">Notes</Link>
-            </div>
-          </div>
-        </div>
-        <div className="divide-y divide-dark-lighter/5">
-          {trip.cities.map((cityStop, index) => (
-            <div key={cityStop.cityId} className="p-4 flex items-center gap-4">
-              <div className="w-8 h-8 rounded-full bg-primary text-white font-semibold text-sm flex items-center justify-center">
-                {index + 1}
-              </div>
-              <img src={cityStop.city.image} alt={cityStop.city.name} className="w-16 h-16 rounded-xl object-cover" />
-              <div className="flex-1">
-                <p className="font-semibold text-dark">{cityStop.city.name}, {cityStop.city.country}</p>
-                <p className="text-sm text-dark-lighter/60">
-                  {formatDate(cityStop.startDate)} - {formatDate(cityStop.endDate)}
-                </p>
-              </div>
-            </div>
-          ))}
+      {/* View Toggle */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-display font-bold text-dark">Itinerary</h2>
+        <div className="flex bg-surface-alt rounded-xl p-1">
+          <button
+            onClick={() => setViewMode('timeline')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${viewMode === 'timeline' ? 'bg-white text-dark shadow-sm' : 'text-dark-lighter/60'}`}
+          >
+            <LayoutList className="w-4 h-4" />
+            Timeline
+          </button>
+          <button
+            onClick={() => setViewMode('city')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${viewMode === 'city' ? 'bg-white text-dark shadow-sm' : 'text-dark-lighter/60'}`}
+          >
+            <Grid3X3 className="w-4 h-4" />
+            By City
+          </button>
         </div>
       </div>
 
-      <div className="card overflow-hidden">
-        <div className="p-4 border-b border-dark-lighter/10">
-          <h2 className="font-display font-semibold text-dark">Daily Itinerary</h2>
+      {/* Timeline View */}
+      {viewMode === 'timeline' && (
+        <div className="space-y-6">
+          {timelineData.length > 0 ? (
+            timelineData.map((day, dayIndex) => (
+              <div key={day.date} className="relative">
+                {/* Day connector line */}
+                {dayIndex < timelineData.length - 1 && (
+                  <div className="absolute left-8 top-20 bottom-0 w-0.5 bg-dark-lighter/10 -z-10" />
+                )}
+
+                {/* Day Header */}
+                <div className="flex items-start gap-4 mb-4">
+                  <div className="w-16 h-16 bg-gradient-to-br from-primary to-teal-600 rounded-2xl flex flex-col items-center justify-center text-white shadow-lg shadow-primary/20">
+                    <span className="text-xs font-medium opacity-80">Day</span>
+                    <span className="text-2xl font-display font-bold">{day.dayNum}</span>
+                  </div>
+                  <div className="flex-1 pt-2">
+                    <p className="font-display font-semibold text-dark">{formatFullDate(day.date)}</p>
+                    {day.city && (
+                      <div className="flex items-center gap-1.5 text-sm text-dark-lighter/60 mt-1">
+                        <MapPin className="w-4 h-4" />
+                        <span>{day.city.city.name}, {day.city.city.country}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Activities */}
+                <div className="ml-20 space-y-3">
+                  {day.activities.sort((a, b) => a.time.localeCompare(b.time)).map((act, actIndex) => {
+                    const CategoryIcon = categoryIcons[act.activity.category] || Ticket;
+                    return (
+                      <div key={actIndex} className="card p-4 hover:shadow-lg transition-all hover:-translate-y-0.5 group">
+                        <div className="flex items-start gap-4">
+                          <div className="w-12 h-12 rounded-xl bg-surface-alt flex items-center justify-center group-hover:bg-primary/10 transition-colors">
+                            <CategoryIcon className="w-6 h-6 text-dark-lighter/50 group-hover:text-primary transition-colors" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <p className="font-medium text-dark">{act.activity.name}</p>
+                                <div className="flex items-center gap-3 mt-1 text-sm text-dark-lighter/60">
+                                  <span className="flex items-center gap-1">
+                                    <Clock className="w-3.5 h-3.5" />
+                                    {act.time}
+                                  </span>
+                                  <span className="flex items-center gap-1">
+                                    <Sparkles className="w-3.5 h-3.5" />
+                                    {act.activity.duration}h
+                                  </span>
+                                  <span className="capitalize">{act.activity.category}</span>
+                                </div>
+                              </div>
+                              <span className="text-lg font-semibold text-green-600">${act.activity.cost}</span>
+                            </div>
+                            {act.notes && (
+                              <p className="mt-2 text-sm text-primary bg-primary/5 rounded-lg px-3 py-2">
+                                <span className="font-medium">Note:</span> {act.notes}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="card p-12 text-center">
+              <Ticket className="w-12 h-12 text-dark-lighter/30 mx-auto mb-3" />
+              <h3 className="font-display font-semibold text-dark mb-2">No activities planned yet</h3>
+              <p className="text-dark-lighter/60 mb-4">Add activities to build your itinerary</p>
+              <Link to={`/trips/${tripId}/edit`} className="btn-primary">
+                <Edit className="w-4 h-4" />
+                Add Activities
+              </Link>
+            </div>
+          )}
         </div>
-        <div className="divide-y divide-dark-lighter/5">
-          {trip.activities.map((act, index) => (
-            <div key={index} className="p-4 flex items-start gap-4">
-              <div className="w-16 text-center">
-                <p className="text-xs text-dark-lighter/60">{act.time}</p>
+      )}
+
+      {/* City Group View */}
+      {viewMode === 'city' && (
+        <div className="space-y-6">
+          {cityGroupData.map((group, index) => (
+            <div key={group.city.id} className="card overflow-hidden">
+              {/* City Header */}
+              <div className="relative h-32">
+                <img src={group.city.image} alt={group.city.name} className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-t from-dark/70 to-transparent" />
+                <div className="absolute bottom-0 left-0 right-0 p-4 flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center text-white font-bold">
+                        {index + 1}
+                      </span>
+                      <h3 className="text-xl font-display font-bold text-white">{group.city.name}</h3>
+                    </div>
+                    <p className="text-white/70 text-sm ml-10">{group.city.country}</p>
+                  </div>
+                  <span className="text-white/80 text-sm">{group.dates}</span>
+                </div>
               </div>
-              <img src={act.activity.image} alt={act.activity.name} className="w-16 h-16 rounded-xl object-cover" />
-              <div className="flex-1">
-                <p className="font-medium text-dark">{act.activity.name}</p>
-                <p className="text-sm text-dark-lighter/60">{act.activity.city} • {act.activity.duration}h</p>
-                {act.notes && <p className="text-sm text-primary mt-1">Note: {act.notes}</p>}
+
+              {/* City Activities */}
+              <div className="p-4 space-y-3">
+                {group.activities.length > 0 ? (
+                  group.activities.map((act, actIndex) => {
+                    const CategoryIcon = categoryIcons[act.activity.category] || Ticket;
+                    return (
+                      <div key={actIndex} className="flex items-center gap-4 p-3 bg-surface-alt rounded-xl hover:bg-dark-lighter/5 transition-colors">
+                        <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0">
+                          <img src={act.activity.image} alt={act.activity.name} className="w-full h-full object-cover" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-dark truncate">{act.activity.name}</p>
+                          <div className="flex items-center gap-3 text-sm text-dark-lighter/60">
+                            <span>{act.time}</span>
+                            <span>•</span>
+                            <span>{act.activity.duration}h</span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-semibold text-dark">${act.activity.cost}</span>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="text-center text-dark-lighter/60 py-4">No activities in this city</p>
+                )}
               </div>
-              <span className="badge bg-surface-alt text-xs">${act.activity.cost}</span>
+
+              {/* City Total */}
+              <div className="p-4 border-t border-dark-lighter/10 bg-surface-alt/50 flex items-center justify-between">
+                <span className="text-sm text-dark-lighter/60">
+                  {group.activities.length} {group.activities.length === 1 ? 'activity' : 'activities'}
+                </span>
+                <span className="font-semibold text-dark">
+                  Total: ${group.activities.reduce((sum, a) => sum + (a.activity?.cost || 0), 0)}
+                </span>
+              </div>
             </div>
           ))}
         </div>
-      </div>
+      )}
+
+      {/* Trip Notes */}
+      {trip.notes?.length > 0 && (
+        <div className="card p-6">
+          <h3 className="text-lg font-display font-bold text-dark mb-4">Trip Notes</h3>
+          <div className="space-y-3">
+            {trip.notes.map(note => (
+              <div key={note.id} className="p-3 bg-surface-alt rounded-xl">
+                <div className="flex items-center gap-2 text-sm text-dark-lighter/60 mb-1">
+                  <Calendar className="w-4 h-4" />
+                  <span>{formatDate(note.date)}</span>
+                  {note.city && (
+                    <>
+                      <span>•</span>
+                      <MapPin className="w-4 h-4" />
+                      <span>{note.city}</span>
+                    </>
+                  )}
+                </div>
+                <p className="text-dark">{note.content}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
