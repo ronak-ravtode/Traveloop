@@ -1,10 +1,13 @@
-import { useState, useMemo } from 'react';
-import { Search, MapPin, Globe, X, ChevronDown, Check, AlertCircle } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { Search, MapPin, Globe, X, ChevronDown, Check, AlertCircle, Loader2 } from 'lucide-react';
 import CityCard from '../components/trip/CityCard';
-import { mockCities } from '../data/mockCities';
+import { cityAPI } from '../services/api';
 import { tripService } from '../data/mockTripService';
 
 const CitySearch = () => {
+  const [cities, setCities] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [selectedRegion, setSelectedRegion] = useState('all');
   const [costLevel, setCostLevel] = useState('all');
@@ -14,10 +17,28 @@ const CitySearch = () => {
   const [showModal, setShowModal] = useState(false);
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
 
-  const regions = useMemo(() => {
-    const uniqueRegions = [...new Set(mockCities.map(c => c.region))];
-    return ['all', ...uniqueRegions];
+  // Fetch cities from API
+  useEffect(() => {
+    const fetchCities = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const response = await cityAPI.getAll({ limit: 100 });
+        setCities(response.data || []);
+      } catch (err) {
+        console.error('Error fetching cities:', err);
+        setError('Failed to load cities. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchCities();
   }, []);
+
+  const regions = useMemo(() => {
+    const uniqueRegions = [...new Set(cities.map(c => c.region).filter(Boolean))];
+    return ['all', ...uniqueRegions];
+  }, [cities]);
 
   const costLevels = [
     { value: 'all', label: 'All Costs' },
@@ -34,15 +55,15 @@ const CitySearch = () => {
   ];
 
   const filteredCities = useMemo(() => {
-    let result = [...mockCities];
+    let result = [...cities];
 
     // Search filter
     if (search) {
       const lowerSearch = search.toLowerCase();
       result = result.filter(city =>
-        city.name.toLowerCase().includes(lowerSearch) ||
-        city.country.toLowerCase().includes(lowerSearch) ||
-        city.tags.some(tag => tag.toLowerCase().includes(lowerSearch))
+        city.name?.toLowerCase().includes(lowerSearch) ||
+        city.country?.toLowerCase().includes(lowerSearch) ||
+        city.tags?.some(tag => tag.toLowerCase().includes(lowerSearch))
       );
     }
 
@@ -53,30 +74,29 @@ const CitySearch = () => {
 
     // Cost level filter
     if (costLevel !== 'all') {
-      const costMap = { low: 1, medium: 2, high: 3 };
-      result = result.filter(city => city.costIndex === costMap[costLevel]);
+      result = result.filter(city => city.costLevel === costLevel);
     }
 
     // Sorting
     switch (sortBy) {
       case 'popularity':
-        result.sort((a, b) => b.popularity - a.popularity);
+        result.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
         break;
       case 'cost-low':
-        result.sort((a, b) => a.costIndex - b.costIndex);
+        result.sort((a, b) => (a.costIndex || 0) - (b.costIndex || 0));
         break;
       case 'cost-high':
-        result.sort((a, b) => b.costIndex - a.costIndex);
+        result.sort((a, b) => (b.costIndex || 0) - (a.costIndex || 0));
         break;
       case 'name':
-        result.sort((a, b) => a.name.localeCompare(b.name));
+        result.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
         break;
       default:
         break;
     }
 
     return result;
-  }, [search, selectedRegion, costLevel, sortBy]);
+  }, [cities, search, selectedRegion, costLevel, sortBy]);
 
   const handleAddToTrip = (city) => {
     const userTrips = tripService.getAll();
@@ -86,7 +106,7 @@ const CitySearch = () => {
       return;
     }
     // Check if city already exists in any trip
-    const inTrip = userTrips.some(trip => trip.cities?.some(c => c.cityId === city.id));
+    const inTrip = userTrips.some(trip => trip.stops?.some(s => s.city === city.name));
     if (inTrip) {
       setToast({ visible: true, message: `${city.name} is already in one of your trips`, type: 'error' });
       setTimeout(() => setToast({ visible: false, message: '' }), 3000);
@@ -96,34 +116,63 @@ const CitySearch = () => {
     setShowModal(true);
   };
 
-  const addCityToTrip = (tripId) => {
-    const trip = tripService.getById(tripId);
-    if (trip && selectedCity) {
-      const existingCity = trip.cities?.find(c => c.cityId === selectedCity.id);
-      if (!existingCity) {
-        const newCity = {
-          cityId: selectedCity.id,
+  const addCityToTrip = async (tripId) => {
+    try {
+      const trip = tripService.getById(tripId);
+      if (trip && selectedCity) {
+        const newStop = {
           city: selectedCity.name,
+          country: selectedCity.country,
+          cityId: selectedCity._id,
           startDate: trip.startDate || new Date().toISOString().split('T')[0],
           endDate: trip.endDate || new Date().toISOString().split('T')[0],
-          order: (trip.cities?.length || 0) + 1
+          order: (trip.stops?.length || 0) + 1
         };
-        tripService.update(tripId, {
-          cities: [...(trip.cities || []), newCity]
+        await tripService.update(tripId, {
+          stops: [...(trip.stops || []), newStop]
         });
       }
+      setShowModal(false);
+      setSelectedCity(null);
+      setToast({ visible: true, message: `Added ${selectedCity.name} to trip!`, type: 'success' });
+      setTimeout(() => setToast({ visible: false, message: '' }), 3000);
+    } catch (err) {
+      console.error('Error adding city to trip:', err);
+      setToast({ visible: true, message: 'Failed to add city to trip', type: 'error' });
+      setTimeout(() => setToast({ visible: false, message: '' }), 3000);
     }
-    setShowModal(false);
-    setSelectedCity(null);
   };
 
   const activeFiltersCount = [selectedRegion !== 'all', costLevel !== 'all'].filter(Boolean).length;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="card p-8 text-center">
+        <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+        <p className="text-red-500 mb-4">{error}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="btn-primary"
+        >
+          Try Again
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       {/* Toast Notification */}
       {toast.visible && (
-        <div className={`fixed top-20 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg ${
+        <div className={`fixed top-20 right-4 z-[100] flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg ${
           toast.type === 'error' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'
         }`}>
           {toast.type === 'error' ? <AlertCircle className="w-5 h-5" /> : <Check className="w-5 h-5" />}
@@ -238,7 +287,7 @@ const CitySearch = () => {
       {filteredCities.length > 0 ? (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filteredCities.map(city => (
-            <CityCard key={city.id} city={city} onSelect={handleAddToTrip} />
+            <CityCard key={city._id} city={city} onSelect={handleAddToTrip} />
           ))}
         </div>
       ) : (
@@ -283,8 +332,8 @@ const CitySearch = () => {
               <div className="space-y-2 max-h-48 overflow-y-auto">
                 {tripService.getAll().map(trip => (
                   <button
-                    key={trip.id}
-                    onClick={() => addCityToTrip(trip.id)}
+                    key={trip._id || trip.id}
+                    onClick={() => addCityToTrip(trip._id || trip.id)}
                     className="w-full p-3 text-left rounded-xl border border-dark-lighter/10 hover:border-primary hover:bg-primary/5 transition-all group"
                   >
                     <p className="font-medium text-dark group-hover:text-primary">{trip.title}</p>

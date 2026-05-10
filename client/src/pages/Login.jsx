@@ -60,7 +60,10 @@ const Login = () => {
     setLoading(true);
     try {
       await loginWithGoogle();
-      navigate('/dashboard');
+      // Wait for auth state to update before navigating
+      setTimeout(() => {
+        navigate('/dashboard');
+      }, 500);
     } catch (err) {
       setError('Google sign-in failed. Please try again.');
     } finally {

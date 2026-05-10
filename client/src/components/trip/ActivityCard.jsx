@@ -42,7 +42,7 @@ const ActivityCard = ({ activity, onAdd, onView }) => {
         <h4 className="font-display font-semibold text-dark leading-tight mb-1 line-clamp-2">{activity.name}</h4>
         <p className="text-xs text-dark-lighter/60 flex items-center gap-1 mb-3">
           <MapPin className="w-3 h-3" />
-          {activity.city}
+          {typeof activity.city === 'object' ? activity.city?.name : activity.city}
         </p>
 
         <div className="flex items-center justify-between text-sm text-dark-lighter/70 mb-3">
@@ -56,7 +56,7 @@ const ActivityCard = ({ activity, onAdd, onView }) => {
         </div>
 
         <div className="flex flex-wrap gap-1.5 mb-3">
-          {activity.tags.slice(0, 2).map((tag, i) => (
+          {(activity.tags || []).slice(0, 2).map((tag, i) => (
             <span key={i} className="badge bg-surface-alt text-[10px]">{tag}</span>
           ))}
         </div>

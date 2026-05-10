@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Compass, Filter, X } from 'lucide-react';
+import { Plus, Search, Compass, Filter, X, Loader2, AlertCircle } from 'lucide-react';
 import TripListCard from '../components/trip/TripListCard';
 import { tripService } from '../data/mockTripService';
 
@@ -8,33 +8,47 @@ const MyTrips = () => {
   const [trips, setTrips] = useState([]);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Load trips from service
+  // Load trips from API
   useEffect(() => {
-    const loadTrips = () => {
-      const allTrips = tripService.getAll();
-      setTrips(allTrips);
-      setIsLoading(false);
+    const loadTrips = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await tripService.getAll();
+        setTrips(data);
+      } catch (err) {
+        console.error('Error loading trips:', err);
+        setError('Failed to load trips. Please try again.');
+      } finally {
+        setLoading(false);
+      }
     };
     loadTrips();
   }, []);
 
+  // Handle delete
+  const handleDelete = async (tripId) => {
+    try {
+      await tripService.delete(tripId);
+      // Refresh trips after delete
+      const data = await tripService.getAll();
+      setTrips(data);
+    } catch (err) {
+      console.error('Error deleting trip:', err);
+      alert('Failed to delete trip. Please try again.');
+    }
+  };
+
   // Filter trips based on search and status
   const filteredTrips = trips.filter(trip => {
     const matchesFilter = filter === 'all' || trip.status === filter;
-    const matchesSearch = trip.title.toLowerCase().includes(search.toLowerCase()) ||
-      trip.description.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = trip.title?.toLowerCase().includes(search.toLowerCase()) ||
+      trip.description?.toLowerCase().includes(search.toLowerCase());
     return matchesFilter && matchesSearch;
   });
-
-  // Handle delete
-  const handleDelete = (tripId) => {
-    const success = tripService.delete(tripId);
-    if (success) {
-      setTrips(tripService.getAll());
-    }
-  };
 
   // Clear filters
   const clearFilters = () => {
@@ -53,10 +67,25 @@ const MyTrips = () => {
     { value: 'completed', label: 'Completed' },
   ];
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="card p-8 text-center">
+        <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+        <p className="text-red-500 mb-4">{error}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="btn-primary"
+        >
+          Try Again
+        </button>
       </div>
     );
   }
@@ -156,7 +185,7 @@ const MyTrips = () => {
       {filteredTrips.length > 0 ? (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredTrips.map(trip => (
-            <TripListCard key={trip.id} trip={trip} onDelete={handleDelete} />
+            <TripListCard key={trip._id || trip.id} trip={trip} onDelete={handleDelete} />
           ))}
         </div>
       ) : (

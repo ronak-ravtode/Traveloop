@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   MapPin, Calendar, DollarSign, Share2, Edit, ArrowLeft, Clock,
-  LayoutList, Grid3X3, Plane, Ticket, Utensils, Camera, Landmark, Sun, Sparkles, StickyNote
+  LayoutList, Grid3X3, Plane, Ticket, Utensils, Camera, Landmark, Sun, Sparkles, StickyNote, Loader2, AlertCircle
 } from 'lucide-react';
 import { tripService } from '../data/mockTripService';
 
@@ -21,20 +21,40 @@ const ItineraryView = () => {
   const { tripId } = useParams();
   const navigate = useNavigate();
   const [trip, setTrip] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [viewMode, setViewMode] = useState('timeline');
 
   useEffect(() => {
-    const foundTrip = tripService.getById(tripId);
-    if (foundTrip) {
-      setTrip(foundTrip);
-    } else {
-      navigate('/trips');
-    }
+    const fetchTrip = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await tripService.getById(tripId);
+        if (data) {
+          setTrip(data);
+        } else {
+          navigate('/trips');
+        }
+      } catch (err) {
+        console.error('Error fetching trip:', err);
+        setError('Failed to load trip. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchTrip();
   }, [tripId, navigate]);
 
-  const formatDate = (date) => new Date(date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  const formatDate = (date) => {
+    if (!date) return '';
+    return new Date(date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  };
 
-  const formatFullDate = (date) => new Date(date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  const formatFullDate = (date) => {
+    if (!date) return '';
+    return new Date(date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  };
 
   const getDuration = () => {
     if (!trip?.startDate || !trip?.endDate) return 0;
@@ -42,7 +62,10 @@ const ItineraryView = () => {
   };
 
   const handleShare = () => {
-    if (trip?.shareCode) {
+    if (trip?.publicId) {
+      navigator.clipboard.writeText(`${window.location.origin}/shared/${trip.publicId}`);
+      alert('Share link copied to clipboard!');
+    } else if (trip?.shareCode) {
       navigator.clipboard.writeText(`${window.location.origin}/shared/${trip.shareCode}`);
       alert('Share link copied to clipboard!');
     } else {
@@ -53,16 +76,19 @@ const ItineraryView = () => {
   // Get all activities organized by day
   const getTimelineData = () => {
     if (!trip) return [];
+    const activities = trip.activities || [];
+    const stops = trip.stops || trip.cities || [];
     const days = {};
-    trip.activities.forEach(act => {
+    activities.forEach(act => {
       if (!days[act.date]) {
-        const city = trip.cities.find(c => c.cityId === act.cityId);
+        const cityId = act.cityId || act.city?._id;
+        const city = stops.find(s => s.cityId === cityId || s._id === cityId);
         days[act.date] = { date: act.date, city, activities: [] };
       }
       days[act.date].activities.push(act);
     });
     return Object.entries(days).sort(([a], [b]) => new Date(a) - new Date(b)).map(([date, data]) => ({
-      dayNum: Math.ceil((new Date(date) - new Date(trip.startDate)) / (1000 * 60 * 60 * 24)) + 1,
+      dayNum: trip.startDate ? Math.ceil((new Date(date) - new Date(trip.startDate)) / (1000 * 60 * 60 * 24)) + 1 : 1,
       ...data,
     }));
   };
@@ -70,27 +96,51 @@ const ItineraryView = () => {
   // Get activities grouped by city
   const getCityGroupData = () => {
     if (!trip) return [];
-    return trip.cities.map(cityStop => {
-      const cityActivities = trip.activities.filter(act => act.cityId === cityStop.cityId);
+    const stops = trip.stops || trip.cities || [];
+    return stops.map(cityStop => {
+      const cityId = cityStop.cityId || cityStop._id;
+      const activities = (trip.activities || []).filter(act => {
+        const actCityId = act.cityId || act.city?._id;
+        return actCityId === cityId;
+      });
       return {
-        city: cityStop.city,
+        city: cityStop,
+        cityName: cityStop.city || cityStop.name,
+        cityCountry: cityStop.country,
         dates: `${formatDate(cityStop.startDate)} - ${formatDate(cityStop.endDate)}`,
-        activities: cityActivities,
+        activities,
       };
     });
   };
 
-  if (!trip) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
 
+  if (error) {
+    return (
+      <div className="card p-8 text-center">
+        <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+        <p className="text-red-500 mb-4">{error}</p>
+        <button onClick={() => navigate('/trips')} className="btn-primary">
+          Back to Trips
+        </button>
+      </div>
+    );
+  }
+
+  if (!trip) return null;
+
+  const stops = trip.stops || trip.cities || [];
+  const activities = trip.activities || [];
   const timelineData = getTimelineData();
   const cityGroupData = getCityGroupData();
-  const totalActivityCost = trip.activities.reduce((sum, a) => sum + (a.activity?.cost || 0), 0);
+  const totalActivityCost = activities.reduce((sum, a) => sum + (a.activity?.cost || a.cost || 0), 0);
+  const tripIdValue = trip._id || trip.id;
 
   return (
     <div className="space-y-6">
@@ -112,15 +162,15 @@ const ItineraryView = () => {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link to={`/trips/${tripId}/edit`} className="btn-secondary">
+          <Link to={`/trips/${tripIdValue}/edit`} className="btn-secondary">
             <Edit className="w-4 h-4" />
             Edit Itinerary
           </Link>
-          <Link to={`/trips/${tripId}/budget`} className="btn-secondary">
+          <Link to={`/trips/${tripIdValue}/budget`} className="btn-secondary">
             <DollarSign className="w-4 h-4" />
             View Budget
           </Link>
-          <Link to={`/trips/${tripId}/notes`} className="btn-secondary">
+          <Link to={`/trips/${tripIdValue}/notes`} className="btn-secondary">
             <StickyNote className="w-4 h-4" />
             Notes
           </Link>
@@ -133,7 +183,7 @@ const ItineraryView = () => {
 
       {/* Trip Cover & Stats */}
       <div className="relative h-48 md:h-64 rounded-3xl overflow-hidden">
-        <img src={trip.coverImage} alt={trip.title} className="w-full h-full object-cover" />
+        <img src={trip.coverImage || 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=1200'} alt={trip.title} className="w-full h-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-dark/80 via-dark/40 to-transparent" />
         <div className="absolute bottom-0 left-0 right-0 p-6 md:p-8">
           <div className="flex flex-wrap items-center gap-4 text-white/90">
@@ -147,11 +197,11 @@ const ItineraryView = () => {
             </div>
             <div className="flex items-center gap-2">
               <MapPin className="w-5 h-5" />
-              <span>{trip.cities.length} cities</span>
+              <span>{stops.length} {stops.length === 1 ? 'city' : 'cities'}</span>
             </div>
             <div className="flex items-center gap-2">
               <Ticket className="w-5 h-5" />
-              <span>{trip.activities.length} activities</span>
+              <span>{activities.length} activities</span>
             </div>
           </div>
         </div>
@@ -177,7 +227,7 @@ const ItineraryView = () => {
             </div>
             <div>
               <p className="text-xs text-dark-lighter/60">Destinations</p>
-              <p className="text-xl font-display font-bold text-dark">{trip.cities.length}</p>
+              <p className="text-xl font-display font-bold text-dark">{stops.length}</p>
             </div>
           </div>
         </div>
@@ -188,7 +238,7 @@ const ItineraryView = () => {
             </div>
             <div>
               <p className="text-xs text-dark-lighter/60">Activities</p>
-              <p className="text-xl font-display font-bold text-dark">{trip.activities.length}</p>
+              <p className="text-xl font-display font-bold text-dark">{activities.length}</p>
             </div>
           </div>
         </div>
@@ -199,7 +249,7 @@ const ItineraryView = () => {
             </div>
             <div>
               <p className="text-xs text-dark-lighter/60">Total Budget</p>
-              <p className="text-xl font-display font-bold text-dark">${trip.budget.total.toLocaleString()}</p>
+              <p className="text-xl font-display font-bold text-dark">${(trip.budget?.total || 0).toLocaleString()}</p>
             </div>
           </div>
         </div>
@@ -232,12 +282,10 @@ const ItineraryView = () => {
           {timelineData.length > 0 ? (
             timelineData.map((day, dayIndex) => (
               <div key={day.date} className="relative">
-                {/* Day connector line */}
                 {dayIndex < timelineData.length - 1 && (
                   <div className="absolute left-8 top-20 bottom-0 w-0.5 bg-dark-lighter/10 -z-10" />
                 )}
 
-                {/* Day Header */}
                 <div className="flex items-start gap-4 mb-4">
                   <div className="w-16 h-16 bg-gradient-to-br from-primary to-teal-600 rounded-2xl flex flex-col items-center justify-center text-white shadow-lg shadow-primary/20">
                     <span className="text-xs font-medium opacity-80">Day</span>
@@ -248,16 +296,16 @@ const ItineraryView = () => {
                     {day.city && (
                       <div className="flex items-center gap-1.5 text-sm text-dark-lighter/60 mt-1">
                         <MapPin className="w-4 h-4" />
-                        <span>{day.city.city.name}, {day.city.city.country}</span>
+                        <span>{day.city.city || day.city.name}, {day.city.country}</span>
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Activities */}
                 <div className="ml-20 space-y-3">
-                  {day.activities.sort((a, b) => a.time.localeCompare(b.time)).map((act, actIndex) => {
-                    const CategoryIcon = categoryIcons[act.activity.category] || Ticket;
+                  {day.activities.sort((a, b) => (a.time || '').localeCompare(b.time || '')).map((act, actIndex) => {
+                    const activityData = act.activity || act;
+                    const CategoryIcon = categoryIcons[activityData.category] || Ticket;
                     return (
                       <div key={actIndex} className="card p-4 hover:shadow-lg transition-all hover:-translate-y-0.5 group">
                         <div className="flex items-start gap-4">
@@ -267,20 +315,20 @@ const ItineraryView = () => {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between gap-2">
                               <div>
-                                <p className="font-medium text-dark">{act.activity.name}</p>
+                                <p className="font-medium text-dark">{activityData.name || activityData.title}</p>
                                 <div className="flex items-center gap-3 mt-1 text-sm text-dark-lighter/60">
                                   <span className="flex items-center gap-1">
                                     <Clock className="w-3.5 h-3.5" />
-                                    {act.time}
+                                    {act.time || 'Anytime'}
                                   </span>
                                   <span className="flex items-center gap-1">
                                     <Sparkles className="w-3.5 h-3.5" />
-                                    {act.activity.duration}h
+                                    {activityData.duration || 1}h
                                   </span>
-                                  <span className="capitalize">{act.activity.category}</span>
+                                  <span className="capitalize">{activityData.category || 'activity'}</span>
                                 </div>
                               </div>
-                              <span className="text-lg font-semibold text-green-600">${act.activity.cost}</span>
+                              <span className="text-lg font-semibold text-green-600">${activityData.cost || 0}</span>
                             </div>
                             {act.notes && (
                               <p className="mt-2 text-sm text-primary bg-primary/5 rounded-lg px-3 py-2">
@@ -300,7 +348,7 @@ const ItineraryView = () => {
               <Ticket className="w-12 h-12 text-dark-lighter/30 mx-auto mb-3" />
               <h3 className="font-display font-semibold text-dark mb-2">No activities planned yet</h3>
               <p className="text-dark-lighter/60 mb-4">Add activities to build your itinerary</p>
-              <Link to={`/trips/${tripId}/edit`} className="btn-primary">
+              <Link to={`/trips/${tripIdValue}/edit`} className="btn-primary">
                 <Edit className="w-4 h-4" />
                 Add Activities
               </Link>
@@ -313,45 +361,41 @@ const ItineraryView = () => {
       {viewMode === 'city' && (
         <div className="space-y-6">
           {cityGroupData.map((group, index) => (
-            <div key={group.city.id} className="card overflow-hidden">
-              {/* City Header */}
+            <div key={group.city._id || index} className="card overflow-hidden">
               <div className="relative h-32">
-                <img src={group.city.image} alt={group.city.name} className="w-full h-full object-cover" />
+                <img src={group.city.image || 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800'} alt={group.cityName} className="w-full h-full object-cover" />
                 <div className="absolute inset-0 bg-gradient-to-t from-dark/70 to-transparent" />
                 <div className="absolute bottom-0 left-0 right-0 p-4 flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center text-white font-bold">
-                        {index + 1}
-                      </span>
-                      <h3 className="text-xl font-display font-bold text-white">{group.city.name}</h3>
-                    </div>
-                    <p className="text-white/70 text-sm ml-10">{group.city.country}</p>
+                  <div className="flex items-center gap-2">
+                    <span className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center text-white font-bold">
+                      {index + 1}
+                    </span>
+                    <h3 className="text-xl font-display font-bold text-white">{group.cityName}</h3>
                   </div>
                   <span className="text-white/80 text-sm">{group.dates}</span>
                 </div>
               </div>
 
-              {/* City Activities */}
               <div className="p-4 space-y-3">
                 {group.activities.length > 0 ? (
                   group.activities.map((act, actIndex) => {
-                    const CategoryIcon = categoryIcons[act.activity.category] || Ticket;
+                    const activityData = act.activity || act;
+                    const CategoryIcon = categoryIcons[activityData.category] || Ticket;
                     return (
                       <div key={actIndex} className="flex items-center gap-4 p-3 bg-surface-alt rounded-xl hover:bg-dark-lighter/5 transition-colors">
                         <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0">
-                          <img src={act.activity.image} alt={act.activity.name} className="w-full h-full object-cover" />
+                          <img src={activityData.image || 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=200'} alt={activityData.name} className="w-full h-full object-cover" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-dark truncate">{act.activity.name}</p>
+                          <p className="font-medium text-dark truncate">{activityData.name || activityData.title}</p>
                           <div className="flex items-center gap-3 text-sm text-dark-lighter/60">
-                            <span>{act.time}</span>
+                            <span>{act.time || 'Anytime'}</span>
                             <span>•</span>
-                            <span>{act.activity.duration}h</span>
+                            <span>{activityData.duration || 1}h</span>
                           </div>
                         </div>
                         <div className="text-right">
-                          <span className="font-semibold text-dark">${act.activity.cost}</span>
+                          <span className="font-semibold text-dark">${activityData.cost || 0}</span>
                         </div>
                       </div>
                     );
@@ -361,13 +405,12 @@ const ItineraryView = () => {
                 )}
               </div>
 
-              {/* City Total */}
               <div className="p-4 border-t border-dark-lighter/10 bg-surface-alt/50 flex items-center justify-between">
                 <span className="text-sm text-dark-lighter/60">
                   {group.activities.length} {group.activities.length === 1 ? 'activity' : 'activities'}
                 </span>
                 <span className="font-semibold text-dark">
-                  Total: ${group.activities.reduce((sum, a) => sum + (a.activity?.cost || 0), 0)}
+                  Total: ${group.activities.reduce((sum, a) => sum + (a.activity?.cost || a.cost || 0), 0)}
                 </span>
               </div>
             </div>
@@ -381,7 +424,7 @@ const ItineraryView = () => {
           <h3 className="text-lg font-display font-bold text-dark mb-4">Trip Notes</h3>
           <div className="space-y-3">
             {trip.notes.map(note => (
-              <div key={note.id} className="p-3 bg-surface-alt rounded-xl">
+              <div key={note._id || note.id} className="p-3 bg-surface-alt rounded-xl">
                 <div className="flex items-center gap-2 text-sm text-dark-lighter/60 mb-1">
                   <Calendar className="w-4 h-4" />
                   <span>{formatDate(note.date)}</span>

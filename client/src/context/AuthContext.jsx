@@ -23,6 +23,27 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(DEMO_MODE ? DEMO_USER : null);
   const [loading, setLoading] = useState(true);
+  const [idToken, setIdToken] = useState(null);
+
+  // Get Firebase ID token for API requests
+  const getIdToken = async () => {
+    if (DEMO_MODE) {
+      // Return mock token for demo mode
+      return 'demo-mock-token';
+    }
+    if (user?.uid) {
+      try {
+        const { getIdToken: firebaseGetToken } = await import('../firebase/auth');
+        // We need the auth instance to get token
+        const token = localStorage.getItem('firebaseIdToken');
+        return token;
+      } catch (error) {
+        console.error('Error getting ID token:', error);
+        return null;
+      }
+    }
+    return null;
+  };
 
   useEffect(() => {
     if (DEMO_MODE) {
@@ -31,17 +52,32 @@ export const AuthProvider = ({ children }) => {
     }
 
     // Listen to Firebase auth state
-    const unsubscribe = observeAuthState((firebaseUser) => {
+    const unsubscribe = observeAuthState(async (firebaseUser) => {
       if (firebaseUser) {
-        setUser({
+        // Get ID token for API calls
+        let token = null;
+        try {
+          token = await firebaseUser.getIdToken();
+          localStorage.setItem('firebaseIdToken', token);
+        } catch (error) {
+          console.error('Error getting ID token:', error);
+        }
+
+        setIdToken(token);
+        const userData = {
           uid: firebaseUser.uid,
           email: firebaseUser.email,
           displayName: firebaseUser.displayName,
           photoURL: firebaseUser.photoURL,
           provider: firebaseUser.providerId
-        });
+        };
+        setUser(userData);
+        // Store user info for API calls (hackathon approach without Firebase Admin)
+        localStorage.setItem('traveloop_user', JSON.stringify(userData));
       } else {
         setUser(null);
+        setIdToken(null);
+        localStorage.removeItem('firebaseIdToken');
       }
       setLoading(false);
     });
@@ -55,6 +91,23 @@ export const AuthProvider = ({ children }) => {
       console.error('Firebase logout error:', error);
     }
     setUser(null);
+    setIdToken(null);
+    localStorage.removeItem('firebaseIdToken');
+    localStorage.removeItem('traveloop_user');
+  };
+
+  const refreshToken = async () => {
+    if (DEMO_MODE) return;
+    try {
+      const { auth } = await import('../firebase/config');
+      if (auth?.currentUser) {
+        const token = await auth.currentUser.getIdToken(true);
+        localStorage.setItem('firebaseIdToken', token);
+        setIdToken(token);
+      }
+    } catch (error) {
+      console.error('Error refreshing token:', error);
+    }
   };
 
   const value = {
@@ -63,6 +116,9 @@ export const AuthProvider = ({ children }) => {
     isAuthenticated: !!user,
     isDemoMode: DEMO_MODE,
     logout,
+    getIdToken,
+    refreshToken,
+    idToken,
   };
 
   return (

@@ -1,16 +1,18 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, DollarSign, Image, Globe, Lock, ArrowLeft, CheckCircle, Sparkles } from 'lucide-react';
+import { Calendar, DollarSign, Image, Globe, Lock, ArrowLeft, CheckCircle, Sparkles, Loader2, AlertCircle, Upload, X } from 'lucide-react';
 import { FormInput, FormTextarea, DateInput } from '../components/forms';
 import { tripService } from '../data/mockTripService';
+import { uploadAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
-// Simple toast notification component
-const Toast = ({ message, isVisible, onClose }) => {
+const Toast = ({ message, isVisible, type = 'success', onClose }) => {
   if (!isVisible) return null;
+  const bgColor = type === 'error' ? 'bg-red-600' : 'bg-green-600';
   return (
-    <div className="fixed top-6 right-6 z-50 animate-slide-in">
-      <div className="bg-green-600 text-white px-6 py-4 rounded-xl shadow-lg flex items-center gap-3">
-        <CheckCircle className="w-5 h-5" />
+    <div className="fixed top-6 right-6 z-[100] animate-slide-in">
+      <div className={`${bgColor} text-white px-6 py-4 rounded-xl shadow-lg flex items-center gap-3`}>
+        {type === 'error' ? <AlertCircle className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
         <p className="font-medium">{message}</p>
         <button onClick={onClose} className="ml-2 hover:bg-white/20 rounded-lg p-1">
           <span className="sr-only">Close</span>
@@ -23,7 +25,10 @@ const Toast = ({ message, isVisible, onClose }) => {
 
 const CreateTrip = () => {
   const navigate = useNavigate();
-  const [toast, setToast] = useState({ visible: false, message: '' });
+  const { isAuthenticated } = useAuth();
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -33,11 +38,13 @@ const CreateTrip = () => {
     budget: '',
     isPublic: false,
   });
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
   const [errors, setErrors] = useState({});
 
-  const showToast = (message) => {
-    setToast({ visible: true, message });
-    setTimeout(() => setToast({ visible: false, message: '' }), 4000);
+  const showToast = (message, type = 'success') => {
+    setToast({ visible: true, message, type });
+    setTimeout(() => setToast({ visible: false, message: '', type: 'success' }), 4000);
   };
 
   const validate = () => {
@@ -63,45 +70,94 @@ const CreateTrip = () => {
     }
   };
 
-  const handleSubmit = (e) => {
+  // Handle file selection
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        showToast('Please select an image file', 'error');
+        return;
+      }
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        showToast('Image must be less than 5MB', 'error');
+        return;
+      }
+      setSelectedFile(file);
+
+      // Create preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Remove selected image
+  const removeImage = () => {
+    setSelectedFile(null);
+    setImagePreview(null);
+    setFormData(prev => ({ ...prev, coverImage: '' }));
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
 
-    // Create new trip object
-    const newTrip = {
-      userId: 'user1',
-      title: formData.title,
-      description: formData.description || 'No description provided',
-      coverImage: formData.coverImage || 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800&h=400&fit=crop',
-      status: 'planning',
-      isPublic: formData.isPublic,
-      shareCode: formData.isPublic ? `TRIP${Date.now().toString().slice(-6)}` : null,
-      startDate: formData.startDate,
-      endDate: formData.endDate,
-      cities: [],
-      activities: [],
-      budget: {
-        total: parseInt(formData.budget) || 0,
-        spent: 0,
-        categories: {
-          flights: 0,
-          accommodation: 0,
-          food: 0,
-          activities: 0,
+    setLoading(true);
+
+    try {
+      let coverImageUrl = 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800&h=400&fit=crop';
+
+      // Upload image if file selected and user is authenticated
+      if (selectedFile && isAuthenticated) {
+        setUploading(true);
+        try {
+          const response = await uploadAPI.profileImage(selectedFile);
+          // Server returns { data: { photoURL: ... } }
+          if (response.success && response.data?.photoURL) {
+            coverImageUrl = response.data.photoURL;
+          } else if (response.data?.url) {
+            coverImageUrl = response.data.url;
+          }
+        } catch (uploadErr) {
+          console.error('Image upload failed, using default:', uploadErr.message);
+          // Don't use base64 - too large. Just use default.
+        } finally {
+          setUploading(false);
+        }
+      }
+
+      const newTrip = {
+        name: formData.title,
+        description: formData.description || 'No description provided',
+        coverImage: coverImageUrl,
+        status: 'upcoming',
+        visibility: formData.isPublic ? 'public' : 'private',
+        startDate: formData.startDate,
+        endDate: formData.endDate,
+        budgetLimit: parseInt(formData.budget) || 0,
+        budget: {
           transport: 0,
-          other: 0,
+          stay: 0,
+          activities: 0,
+          meals: 0,
+          miscellaneous: 0,
         },
-      },
-      packingList: [],
-      notes: [],
-    };
+      };
 
-    // Save using tripService
-    const createdTrip = tripService.create(newTrip);
-    console.log('Trip created:', createdTrip);
+      await tripService.create(newTrip);
 
-    showToast('Trip created successfully!');
-    setTimeout(() => navigate('/trips'), 1500);
+      showToast('Trip created successfully!', 'success');
+      setTimeout(() => navigate('/trips'), 1500);
+    } catch (error) {
+      console.error('Error creating trip:', error);
+      showToast(error.message || 'Failed to create trip. Please try again.', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const formatDate = (date) => {
@@ -119,12 +175,15 @@ const CreateTrip = () => {
 
   const duration = calculateDuration();
 
+  const isUploading = uploading || loading;
+
   return (
     <>
       <Toast
         message={toast.message}
         isVisible={toast.visible}
-        onClose={() => setToast({ visible: false, message: '' })}
+        type={toast.type}
+        onClose={() => setToast({ visible: false, message: '', type: 'success' })}
       />
 
       <div className="max-w-6xl mx-auto">
@@ -193,14 +252,52 @@ const CreateTrip = () => {
                 rows={4}
               />
 
-              <FormInput
-                label="Cover Photo URL"
-                name="coverImage"
-                placeholder="https://images.unsplash.com/..."
-                value={formData.coverImage}
-                onChange={handleChange}
-                icon={Image}
-              />
+              {/* Cover Image Upload */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-dark">Cover Photo</label>
+                {!imagePreview ? (
+                  <div className="border-2 border-dashed border-dark-lighter/20 rounded-xl p-6 text-center hover:border-primary hover:bg-primary/5 transition-colors">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileChange}
+                      className="hidden"
+                      id="cover-image-upload"
+                    />
+                    <label htmlFor="cover-image-upload" className="cursor-pointer">
+                      <div className="flex flex-col items-center gap-2">
+                        <Upload className="w-8 h-8 text-dark-lighter/40" />
+                        <p className="text-sm text-dark-lighter/60">
+                          Click to upload cover image
+                        </p>
+                        <p className="text-xs text-dark-lighter/40">
+                          PNG, JPG up to 5MB {!isAuthenticated && '(login to upload)'}
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                ) : (
+                  <div className="relative rounded-xl overflow-hidden">
+                    <img
+                      src={imagePreview}
+                      alt="Cover preview"
+                      className="w-full h-48 object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={removeImage}
+                      className="absolute top-2 right-2 w-8 h-8 bg-red-500 rounded-full flex items-center justify-center text-white hover:bg-red-600 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                    {uploading && (
+                      <div className="absolute inset-0 bg-dark/50 flex items-center justify-center">
+                        <Loader2 className="w-8 h-8 text-white animate-spin" />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
 
               <FormInput
                 label="Estimated Budget"
@@ -251,9 +348,17 @@ const CreateTrip = () => {
 
               <button
                 type="submit"
-                className="btn-primary w-full py-3.5 text-lg font-semibold"
+                disabled={isUploading}
+                className="btn-primary w-full py-3.5 text-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                Create Trip
+                {isUploading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    {uploading ? 'Uploading...' : 'Creating...'}
+                  </>
+                ) : (
+                  'Create Trip'
+                )}
               </button>
             </form>
           </div>
@@ -264,7 +369,7 @@ const CreateTrip = () => {
               <div className="card overflow-hidden">
                 <div className="relative h-48 overflow-hidden">
                   <img
-                    src={formData.coverImage || 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800&h=400&fit=crop'}
+                    src={imagePreview || formData.coverImage || 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800&h=400&fit=crop'}
                     alt="Trip cover"
                     className="w-full h-full object-cover"
                     onError={(e) => {
@@ -313,6 +418,11 @@ const CreateTrip = () => {
                   )}
 
                   <div className="pt-4 border-t border-dark-lighter/10">
+                    {selectedFile && !isAuthenticated && (
+                      <p className="text-xs text-amber-600 text-center mb-2">
+                        Login to save uploaded image
+                      </p>
+                    )}
                     <p className="text-xs text-dark-lighter/50 text-center">
                       Preview updates as you type
                     </p>

@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Plus, Check, X, RotateCcw, Package, Filter, CheckCircle2, Circle } from 'lucide-react';
+import { ArrowLeft, Plus, Check, X, RotateCcw, Package, Filter, CheckCircle2, Circle, Loader2, AlertCircle } from 'lucide-react';
 import { tripService } from '../data/mockTripService';
 
 const CATEGORIES = [
@@ -44,13 +44,27 @@ const DEFAULT_ITEMS = [
 
 const PackingChecklistPage = () => {
   const { tripId } = useParams();
-  const trip = tripService.getById(tripId);
+  const [trip, setTrip] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const fetchTrip = async () => {
+      try {
+        setLoading(true);
+        const data = await tripService.getById(tripId);
+        setTrip(data);
+      } catch (err) {
+        setError('Failed to load trip');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchTrip();
+  }, [tripId]);
 
   // Initialize items from trip data or use defaults
   const [items, setItems] = useState(() => {
-    if (trip?.packingList && trip.packingList.length > 0) {
-      return trip.packingList;
-    }
     return DEFAULT_ITEMS.map((item, idx) => ({
       id: `default-${idx}`,
       name: item.name,
@@ -63,6 +77,13 @@ const PackingChecklistPage = () => {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [showAddForm, setShowAddForm] = useState(false);
   const [addCategory, setAddCategory] = useState('miscellaneous');
+
+  // Sync items with trip data when loaded
+  useEffect(() => {
+    if (trip?.packingList && trip.packingList.length > 0) {
+      setItems(trip.packingList);
+    }
+  }, [trip]);
 
   const stats = useMemo(() => {
     const total = items.length;
@@ -81,19 +102,10 @@ const PackingChecklistPage = () => {
     return { total, packed, percentage, byCategory };
   }, [items]);
 
-  const filteredItems = useMemo(() => {
-    if (selectedCategory === 'all') return items;
-    return items.filter(item => item.category === selectedCategory);
-  }, [items, selectedCategory]);
-
   const toggleItem = (id) => {
     setItems(prev => prev.map(item =>
       item.id === id ? { ...item, packed: !item.packed } : item
     ));
-  };
-
-  const deleteItem = (id) => {
-    setItems(prev => prev.filter(item => item.id !== id));
   };
 
   const addItem = () => {
@@ -108,30 +120,37 @@ const PackingChecklistPage = () => {
     setShowAddForm(false);
   };
 
-  const resetChecklist = () => {
-    if (confirm('Reset all items? This will uncheck all packed items.')) {
-      setItems(prev => prev.map(item => ({ ...item, packed: false })));
-    }
+  const deleteItem = (id) => {
+    setItems(prev => prev.filter(item => item.id !== id));
   };
 
-  const clearAll = () => {
-    if (confirm('Clear all items? This cannot be undone.')) {
-      setItems([]);
-    }
+  const resetList = () => {
+    setItems(DEFAULT_ITEMS.map((item, idx) => ({
+      id: `default-${idx}`,
+      name: item.name,
+      category: item.category,
+      packed: false,
+    })));
   };
 
-  if (!trip) {
+  const filteredItems = selectedCategory === 'all'
+    ? items
+    : items.filter(i => i.category === selectedCategory);
+
+  if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Link to="/trips" className="btn-ghost">
-            <ArrowLeft className="w-5 h-5" />
-          </Link>
-          <h1 className="text-2xl md:text-3xl font-display font-bold text-dark">Packing Checklist</h1>
-        </div>
-        <div className="card p-12 text-center">
-          <p className="text-dark-lighter/60">Trip not found</p>
-        </div>
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (error || !trip) {
+    return (
+      <div className="card p-8 text-center">
+        <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+        <p className="text-red-500 mb-4">{error || 'Trip not found'}</p>
+        <Link to="/trips" className="btn-primary">Back to Trips</Link>
       </div>
     );
   }
@@ -139,251 +158,151 @@ const PackingChecklistPage = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <Link to={`/trips/${tripId}/itinerary`} className="btn-ghost -ml-2">
-            <ArrowLeft className="w-5 h-5" />
-          </Link>
-          <div>
-            <h1 className="text-2xl md:text-3xl font-display font-bold text-dark">Packing Checklist</h1>
-            <p className="text-dark-lighter/60">{trip.title}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={resetChecklist}
-            className="btn-secondary flex items-center gap-2"
-          >
-            <RotateCcw className="w-4 h-4" />
-            Reset
-          </button>
+      <div className="flex items-center gap-4">
+        <Link to={`/trips/${tripId}/itinerary`} className="btn-ghost -ml-2">
+          <ArrowLeft className="w-5 h-5" />
+        </Link>
+        <div>
+          <h1 className="text-2xl font-display font-bold text-dark">Packing Checklist</h1>
+          <p className="text-dark-lighter/60">{trip.title}</p>
         </div>
       </div>
 
-      {/* Progress Card */}
+      {/* Progress */}
       <div className="card p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-xl ${stats.percentage === 100 ? 'bg-green-100' : 'bg-primary/10'}`}>
-              <Package className={`w-5 h-5 ${stats.percentage === 100 ? 'text-green-600' : 'text-primary'}`} />
+            <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center">
+              <Package className="w-6 h-6 text-primary" />
             </div>
             <div>
-              <h3 className="font-display font-semibold text-dark">
-                {stats.percentage === 100 ? 'All packed!' : `${stats.percentage}% Ready`}
-              </h3>
-              <p className="text-sm text-dark-lighter/60">
-                {stats.packed} of {stats.total} items packed
-              </p>
+              <p className="text-sm text-dark-lighter/60">Packing Progress</p>
+              <p className="text-2xl font-display font-bold text-dark">{stats.percentage}%</p>
             </div>
           </div>
-          <button
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="btn-primary flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            Add Item
-          </button>
+          <div className="text-right">
+            <p className="text-sm text-dark-lighter/60">{stats.packed} of {stats.total} items</p>
+          </div>
         </div>
-
-        <div className="h-3 bg-surface-alt rounded-full overflow-hidden mb-2">
+        <div className="h-3 bg-surface-alt rounded-full overflow-hidden">
           <div
-            className={`h-full rounded-full transition-all duration-500 ${
-              stats.percentage === 100
-                ? 'bg-gradient-to-r from-green-400 to-green-500'
-                : 'bg-gradient-to-r from-primary to-primary-light'
-            }`}
+            className="h-full bg-gradient-to-r from-primary to-teal-500 rounded-full transition-all duration-500"
             style={{ width: `${stats.percentage}%` }}
           />
         </div>
-
-        {/* Category Progress */}
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mt-4">
-          {CATEGORIES.map(cat => {
-            const catStats = stats.byCategory[cat.id];
-            const catPercentage = catStats.total > 0 ? Math.round((catStats.packed / catStats.total) * 100) : 0;
-            return (
-              <button
-                key={cat.id}
-                onClick={() => setSelectedCategory(selectedCategory === cat.id ? 'all' : cat.id)}
-                className={`p-3 rounded-xl text-left transition-all ${
-                  selectedCategory === cat.id
-                    ? 'ring-2 ring-primary ring-offset-2'
-                    : 'hover:bg-surface-alt'
-                }`}
-              >
-                <div className="text-lg mb-1">{cat.icon}</div>
-                <p className="text-xs font-medium text-dark truncate">{cat.label}</p>
-                <p className="text-xs text-dark-lighter/60">
-                  {catStats.packed}/{catStats.total}
-                </p>
-                <div className="h-1.5 bg-surface-alt rounded-full mt-2 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-primary"
-                    style={{ width: `${catPercentage}%` }}
-                  />
-                </div>
-              </button>
-            );
-          })}
-        </div>
       </div>
 
-      {/* Add Item Form */}
+      {/* Categories */}
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() => setSelectedCategory('all')}
+          className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+            selectedCategory === 'all'
+              ? 'bg-primary text-white'
+              : 'bg-surface-alt text-dark-lighter hover:bg-primary/10'
+          }`}
+        >
+          All ({stats.total})
+        </button>
+        {CATEGORIES.map(cat => (
+          <button
+            key={cat.id}
+            onClick={() => setSelectedCategory(cat.id)}
+            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
+              selectedCategory === cat.id
+                ? 'bg-primary text-white'
+                : 'bg-surface-alt text-dark-lighter hover:bg-primary/10'
+            }`}
+          >
+            <span>{cat.icon}</span>
+            {cat.label} ({stats.byCategory[cat.id]?.packed || 0}/{stats.byCategory[cat.id]?.total || 0})
+          </button>
+        ))}
+      </div>
+
+      {/* Items */}
+      <div className="card divide-y divide-dark-lighter/10">
+        {filteredItems.length > 0 ? (
+          filteredItems.map(item => (
+            <div key={item.id} className="p-4 flex items-center gap-4 hover:bg-surface-alt/50 transition-colors">
+              <button
+                onClick={() => toggleItem(item.id)}
+                className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                  item.packed
+                    ? 'bg-primary border-primary'
+                    : 'border-dark-lighter/30 hover:border-primary'
+                }`}
+              >
+                {item.packed && <Check className="w-4 h-4 text-white" />}
+              </button>
+              <span className={`flex-1 ${item.packed ? 'text-dark-lighter/50 line-through' : 'text-dark'}`}>
+                {item.name}
+              </span>
+              <span className={`text-xs px-2 py-1 rounded-full ${CATEGORIES.find(c => c.id === item.category)?.color || 'bg-gray-100'}`}>
+                {CATEGORIES.find(c => c.id === item.category)?.label || item.category}
+              </span>
+              <button
+                onClick={() => deleteItem(item.id)}
+                className="p-2 rounded-lg hover:bg-red-50 text-red-500"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ))
+        ) : (
+          <div className="p-12 text-center text-dark-lighter/60">
+            No items in this category
+          </div>
+        )}
+      </div>
+
+      {/* Actions */}
+      <div className="flex flex-wrap gap-4">
+        <button
+          onClick={() => setShowAddForm(true)}
+          className="btn-primary"
+        >
+          <Plus className="w-5 h-5" />
+          Add Item
+        </button>
+        <button
+          onClick={resetList}
+          className="btn-secondary"
+        >
+          <RotateCcw className="w-5 h-5" />
+          Reset List
+        </button>
+      </div>
+
+      {/* Add Modal */}
       {showAddForm && (
-        <div className="card p-5 animate-in slide-in-from-top-2">
-          <h3 className="font-display font-semibold text-dark mb-4">Add New Item</h3>
-          <div className="flex flex-col md:flex-row gap-3">
+        <div className="fixed inset-0 bg-dark/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="card w-full max-w-md p-6">
+            <h3 className="font-display font-semibold text-dark mb-4">Add New Item</h3>
             <input
               type="text"
               value={newItemName}
               onChange={(e) => setNewItemName(e.target.value)}
-              placeholder="Item name..."
-              className="input-field flex-1"
-              onKeyDown={(e) => e.key === 'Enter' && addItem()}
+              placeholder="Item name"
+              className="input-field mb-4"
               autoFocus
             />
             <select
               value={addCategory}
               onChange={(e) => setAddCategory(e.target.value)}
-              className="input-field md:w-48"
+              className="input-field mb-4"
             >
               {CATEGORIES.map(cat => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.icon} {cat.label}
-                </option>
+                <option key={cat.id} value={cat.id}>{cat.icon} {cat.label}</option>
               ))}
             </select>
-            <button onClick={addItem} className="btn-primary">
-              Add
-            </button>
+            <div className="flex gap-3">
+              <button onClick={addItem} className="btn-primary flex-1">Add</button>
+              <button onClick={() => setShowAddForm(false)} className="btn-secondary flex-1">Cancel</button>
+            </div>
           </div>
         </div>
       )}
-
-      {/* Category Filter */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2">
-        <button
-          onClick={() => setSelectedCategory('all')}
-          className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all flex items-center gap-2 ${
-            selectedCategory === 'all'
-              ? 'bg-primary text-white'
-              : 'bg-white text-dark-lighter hover:bg-surface-alt border border-dark-lighter/10'
-          }`}
-        >
-          <Filter className="w-4 h-4" />
-          All ({stats.total})
-        </button>
-        {CATEGORIES.map(cat => {
-          const catStats = stats.byCategory[cat.id];
-          return (
-            <button
-              key={cat.id}
-              onClick={() => setSelectedCategory(cat.id)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all ${
-                selectedCategory === cat.id
-                  ? 'bg-primary text-white'
-                  : 'bg-white text-dark-lighter hover:bg-surface-alt border border-dark-lighter/10'
-              }`}
-            >
-              {cat.icon} {cat.label} ({catStats.packed}/{catStats.total})
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Items List */}
-      <div className="space-y-4">
-        {filteredItems.length === 0 ? (
-          <div className="card p-12 text-center">
-            <Package className="w-12 h-12 text-dark-lighter/30 mx-auto mb-4" />
-            <h3 className="font-display font-semibold text-dark mb-2">No items found</h3>
-            <p className="text-sm text-dark-lighter/60">
-              {selectedCategory === 'all' ? 'Add some items to get started' : 'No items in this category'}
-            </p>
-          </div>
-        ) : (
-          <>
-            {/* Packed items first */}
-            {filteredItems.some(i => i.packed) && (
-              <div className="space-y-2">
-                <h4 className="text-xs font-semibold text-dark-lighter/50 uppercase tracking-wider flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-green-500" />
-                  Packed ({filteredItems.filter(i => i.packed).length})
-                </h4>
-                <div className="space-y-2">
-                  {filteredItems.filter(i => i.packed).map(item => (
-                    <ChecklistItem key={item.id} item={item} onToggle={toggleItem} onDelete={deleteItem} />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Unpacked items */}
-            {filteredItems.some(i => !i.packed) && (
-              <div className="space-y-2">
-                <h4 className="text-xs font-semibold text-dark-lighter/50 uppercase tracking-wider flex items-center gap-2">
-                  <Circle className="w-4 h-4" />
-                  To Pack ({filteredItems.filter(i => !i.packed).length})
-                </h4>
-                <div className="space-y-2">
-                  {filteredItems.filter(i => !i.packed).map(item => (
-                    <ChecklistItem key={item.id} item={item} onToggle={toggleItem} onDelete={deleteItem} />
-                  ))}
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
-      {/* Empty State CTA */}
-      {items.length === 0 && (
-        <div className="card p-8 text-center">
-          <p className="text-dark-lighter/60 mb-4">Your packing list is empty</p>
-          <button onClick={() => setShowAddForm(true)} className="btn-primary">
-            Add your first item
-          </button>
-        </div>
-      )}
-    </div>
-  );
-};
-
-const ChecklistItem = ({ item, onToggle, onDelete }) => {
-  const cat = CATEGORIES.find(c => c.id === item.category) || CATEGORIES[5];
-
-  return (
-    <div className="flex items-center gap-3 p-4 bg-white border border-dark-lighter/10 rounded-xl group hover:border-primary/30 transition-all">
-      <button
-        onClick={() => onToggle?.(item.id)}
-        className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all flex-shrink-0 ${
-          item.packed
-            ? 'bg-green-500 border-green-500 text-white'
-            : 'border-dark-lighter/30 hover:border-primary hover:bg-primary/5'
-        }`}
-      >
-        {item.packed && <Check className="w-4 h-4" />}
-      </button>
-
-      <div className="flex-1 min-w-0">
-        <span className={`text-sm font-medium block truncate ${
-          item.packed ? 'line-through text-dark-lighter/50' : 'text-dark'
-        }`}>
-          {item.name}
-        </span>
-      </div>
-
-      <span className={`text-xs px-2 py-1 rounded-lg flex-shrink-0 ${cat.color}`}>
-        {cat.icon} {cat.label}
-      </span>
-
-      <button
-        onClick={() => onDelete?.(item.id)}
-        className="p-2 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-50 text-red-500 transition-all"
-        title="Delete item"
-      >
-        <X className="w-4 h-4" />
-      </button>
     </div>
   );
 };

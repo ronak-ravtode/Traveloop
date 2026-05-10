@@ -2,54 +2,83 @@ import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   Plus, Calendar, Clock, MapPin, Trash2, ArrowLeft, Save,
-  ChevronUp, ChevronDown, X, Search, DollarSign, Activity, Flag
+  ChevronUp, ChevronDown, X, Search, DollarSign, Activity, Flag, Loader2, AlertCircle
 } from 'lucide-react';
 import { tripService } from '../data/mockTripService';
-import { mockCities } from '../data/mockCities';
-import { mockActivities } from '../data/mockActivities';
+import { cityAPI, activityAPI } from '../services/api';
 import { DateInput } from '../components/forms';
 
 const ItineraryBuilder = () => {
   const { tripId } = useParams();
   const navigate = useNavigate();
   const [tripData, setTripData] = useState(null);
+  const [cities, setCities] = useState([]);
+  const [activities, setActivities] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
   const [showAddStop, setShowAddStop] = useState(false);
   const [showActivityPicker, setShowActivityPicker] = useState(null);
-  const [toast, setToast] = useState({ visible: false, message: '' });
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
 
-  // Load trip data
   useEffect(() => {
-    const trip = tripService.getById(tripId);
-    if (trip) {
-      setTripData({ ...trip });
-    } else {
-      navigate('/trips');
-    }
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const [trip, citiesData, activitiesData] = await Promise.all([
+          tripService.getById(tripId),
+          cityAPI.getAll({ limit: 50 }),
+          activityAPI.getAll({ limit: 100 })
+        ]);
+
+        if (trip) {
+          setTripData({
+            ...trip,
+            cities: trip.stops || trip.cities || [],
+            activities: trip.activities || []
+          });
+        } else {
+          navigate('/trips');
+        }
+
+        setCities(citiesData.data || []);
+        setActivities(activitiesData.data || []);
+      } catch (err) {
+        console.error('Error fetching data:', err);
+        setError('Failed to load trip data. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
   }, [tripId, navigate]);
 
-  const showToast = (message) => {
-    setToast({ visible: true, message });
-    setTimeout(() => setToast({ visible: false, message: '' }), 3000);
+  const showToast = (message, type = 'success') => {
+    setToast({ visible: true, message, type });
+    setTimeout(() => setToast({ visible: false, message: '', type: 'success' }), 3000);
   };
 
   // Add a new stop (city)
-  const addStop = (stopData) => {
-    const city = mockCities.find(c => c.id === stopData.cityId);
+  const addStop = async (stopData) => {
+    const city = cities.find(c => c._id === stopData.cityId);
     const newStop = {
       cityId: stopData.cityId,
-      city,
+      city: city?.name,
+      country: city?.country,
+      cityData: city,
       startDate: stopData.startDate,
       endDate: stopData.endDate,
       notes: stopData.notes || '',
       order: tripData.cities.length + 1,
       activities: [],
     };
-    setTripData(prev => ({
-      ...prev,
-      cities: [...prev.cities, newStop],
-    }));
+
+    const updatedCities = [...tripData.cities, newStop];
+    setTripData(prev => ({ ...prev, cities: updatedCities }));
     setShowAddStop(false);
-    showToast(`Added ${city.name} to your itinerary`);
+    showToast(`Added ${city?.name || 'city'} to your itinerary`);
   };
 
   // Remove a stop
@@ -78,7 +107,7 @@ const ItineraryBuilder = () => {
   // Add activity to a stop
   const addActivityToStop = (cityId, activity) => {
     const newActivity = {
-      activityId: activity.id,
+      activityId: activity._id,
       activity,
       cityId,
       date: '',
@@ -95,7 +124,7 @@ const ItineraryBuilder = () => {
       }),
     }));
     setShowActivityPicker(null);
-    showToast(`Added ${activity.name}`);
+    showToast(`Added ${activity.title || activity.name}`);
   };
 
   // Remove activity from stop
@@ -126,11 +155,29 @@ const ItineraryBuilder = () => {
     }));
   };
 
+  // Save changes
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await tripService.update(tripId, {
+        stops: tripData.cities,
+        activities: tripData.activities,
+      });
+      showToast('Changes saved successfully!');
+    } catch (err) {
+      console.error('Error saving trip:', err);
+      showToast('Failed to save changes. Please try again.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // Calculate totals
-  const totalStops = tripData?.cities?.length || 0;
-  const totalActivities = tripData?.cities?.reduce((sum, c) => sum + (c.activities?.length || 0), 0) || 0;
-  const estimatedCost = tripData?.cities?.reduce((sum, c) => {
-    return sum + (c.activities?.reduce((a, act) => a + (act.activity?.cost || 0), 0) || 0);
+  const stops = tripData?.cities || [];
+  const totalStops = stops.length;
+  const totalActivities = stops.reduce((sum, c) => sum + (c.activities?.length || 0), 0);
+  const estimatedCost = stops.reduce((sum, c) => {
+    return sum + (c.activities?.reduce((a, act) => a + (act.activity?.cost || act.cost || 0), 0) || 0);
   }, 0) || 0;
 
   const formatDate = (date) => {
@@ -138,20 +185,36 @@ const ItineraryBuilder = () => {
     return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  if (!tripData) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
+
+  if (error) {
+    return (
+      <div className="card p-8 text-center">
+        <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+        <p className="text-red-500 mb-4">{error}</p>
+        <button onClick={() => navigate('/trips')} className="btn-primary">
+          Back to Trips
+        </button>
+      </div>
+    );
+  }
+
+  if (!tripData) return null;
 
   return (
     <>
       {/* Toast Notification */}
       {toast.visible && (
-        <div className="fixed top-6 right-6 z-50 animate-slide-in">
-          <div className="bg-green-600 text-white px-6 py-3 rounded-xl shadow-lg">
+        <div className={`fixed top-6 right-6 z-[100] animate-slide-in ${
+          toast.type === 'error' ? 'bg-red-600' : 'bg-green-600'
+        }`}>
+          <div className="text-white px-6 py-3 rounded-xl shadow-lg">
             {toast.message}
           </div>
         </div>
@@ -170,19 +233,12 @@ const ItineraryBuilder = () => {
             </div>
           </div>
           <button
-            onClick={() => {
-              tripService.update(tripId, {
-                cities: tripData.cities,
-                activities: tripData.activities,
-                budget: tripData.budget,
-                notes: tripData.notes,
-              });
-              showToast('Changes saved successfully!');
-            }}
-            className="btn-primary"
+            onClick={handleSave}
+            disabled={saving}
+            className="btn-primary disabled:opacity-50"
           >
-            <Save className="w-5 h-5" />
-            Save Changes
+            {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+            {saving ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
 
@@ -211,7 +267,6 @@ const ItineraryBuilder = () => {
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Main Content - Stops */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Stops List */}
             <div className="card">
               <div className="p-4 border-b border-dark-lighter/10 flex items-center justify-between">
                 <h2 className="font-display font-semibold text-dark">Trip Stops</h2>
@@ -225,18 +280,18 @@ const ItineraryBuilder = () => {
               </div>
 
               <div className="p-4 space-y-4">
-                {tripData.cities.length > 0 ? (
-                  tripData.cities.map((stop, index) => (
+                {stops.length > 0 ? (
+                  stops.map((stop, index) => (
                     <StopCard
-                      key={stop.cityId}
+                      key={stop.cityId || stop._id || index}
                       stop={stop}
                       index={index}
-                      total={tripData.cities.length}
+                      total={stops.length}
                       onMove={moveStop}
-                      onRemove={() => removeStop(stop.cityId)}
-                      onAddActivity={() => setShowActivityPicker(stop.cityId)}
-                      onRemoveActivity={(actIndex) => removeActivity(stop.cityId, actIndex)}
-                      onUpdateActivity={updateActivity}
+                      onRemove={() => removeStop(stop.cityId || stop._id)}
+                      onAddActivity={() => setShowActivityPicker(stop.cityId || stop._id)}
+                      onRemoveActivity={(actIndex) => removeActivity(stop.cityId || stop._id, actIndex)}
+                      onUpdateActivity={(actIndex, field, value) => updateActivity(stop.cityId || stop._id, actIndex, field, value)}
                     />
                   ))
                 ) : (
@@ -303,7 +358,6 @@ const ItineraryBuilder = () => {
               </div>
             </div>
 
-            {/* Quick Stats */}
             <div className="card p-5">
               <h4 className="font-semibold text-dark mb-3">Quick Tips</h4>
               <ul className="space-y-2 text-sm text-dark-lighter/60">
@@ -328,8 +382,8 @@ const ItineraryBuilder = () => {
       {/* Add Stop Modal */}
       {showAddStop && (
         <AddStopModal
-          cities={mockCities}
-          existingStops={tripData.cities}
+          cities={cities}
+          existingStops={stops}
           onAdd={addStop}
           onClose={() => setShowAddStop(false)}
         />
@@ -338,7 +392,7 @@ const ItineraryBuilder = () => {
       {/* Activity Picker Modal */}
       {showActivityPicker && (
         <ActivityPickerModal
-          activities={mockActivities}
+          activities={activities}
           onSelect={(activity) => addActivityToStop(showActivityPicker, activity)}
           onClose={() => setShowActivityPicker(null)}
         />
@@ -351,11 +405,14 @@ const ItineraryBuilder = () => {
 const StopCard = ({ stop, index, total, onMove, onRemove, onAddActivity, onRemoveActivity, onUpdateActivity }) => {
   const [expanded, setExpanded] = useState(true);
 
-  const stopCost = stop.activities.reduce((sum, a) => sum + (a.activity?.cost || 0), 0);
+  const stopCity = stop.cityData || stop.city || {};
+  const stopImage = stopCity.image || stop.image || 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=200';
+  const stopName = stopCity.name || stop.city || 'Unknown City';
+  const stopCountry = stopCity.country || stop.country || '';
+  const stopCost = (stop.activities || []).reduce((sum, a) => sum + (a.activity?.cost || a.cost || 0), 0);
 
   return (
     <div className="border border-dark-lighter/10 rounded-xl overflow-hidden">
-      {/* Stop Header */}
       <div className="p-4 bg-surface-alt flex items-center gap-4">
         <div className="flex flex-col gap-1">
           <button
@@ -375,14 +432,14 @@ const StopCard = ({ stop, index, total, onMove, onRemove, onAddActivity, onRemov
         </div>
 
         <img
-          src={stop.city.image}
-          alt={stop.city.name}
+          src={stopImage}
+          alt={stopName}
           className="w-14 h-14 rounded-xl object-cover"
         />
 
         <div className="flex-1 min-w-0">
-          <h4 className="font-display font-semibold text-dark">{stop.city.name}</h4>
-          <p className="text-sm text-dark-lighter/60">{stop.city.country}</p>
+          <h4 className="font-display font-semibold text-dark">{stopName}</h4>
+          <p className="text-sm text-dark-lighter/60">{stopCountry}</p>
         </div>
 
         <div className="text-right">
@@ -393,7 +450,7 @@ const StopCard = ({ stop, index, total, onMove, onRemove, onAddActivity, onRemov
             <span>{stop.endDate ? new Date(stop.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Not set'}</span>
           </div>
           <p className="text-xs text-dark-lighter/50 mt-1">
-            {stop.activities.length} {stop.activities.length === 1 ? 'activity' : 'activities'} • ${stopCost}
+            {(stop.activities || []).length} {(stop.activities || []).length === 1 ? 'activity' : 'activities'} • ${stopCost}
           </p>
         </div>
 
@@ -413,46 +470,48 @@ const StopCard = ({ stop, index, total, onMove, onRemove, onAddActivity, onRemov
         </div>
       </div>
 
-      {/* Activities */}
       {expanded && (
         <div className="p-4 border-t border-dark-lighter/10">
-          {stop.activities.length > 0 ? (
+          {(stop.activities || []).length > 0 ? (
             <div className="space-y-3 mb-4">
-              {stop.activities.map((act, actIndex) => (
-                <div key={actIndex} className="flex items-center gap-3 p-3 bg-surface-alt rounded-xl">
-                  <img
-                    src={act.activity.image}
-                    alt={act.activity.name}
-                    className="w-10 h-10 rounded-lg object-cover"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-dark text-sm truncate">{act.activity.name}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <input
-                        type="date"
-                        value={act.date}
-                        onChange={(e) => onUpdateActivity(act.activityId, actIndex, 'date', e.target.value)}
-                        className="text-xs bg-white border border-dark-lighter/20 rounded px-2 py-1"
-                      />
-                      <input
-                        type="time"
-                        value={act.time}
-                        onChange={(e) => onUpdateActivity(act.activityId, actIndex, 'time', e.target.value)}
-                        className="text-xs bg-white border border-dark-lighter/20 rounded px-2 py-1"
-                      />
+              {(stop.activities || []).map((act, actIndex) => {
+                const actData = act.activity || act;
+                return (
+                  <div key={actIndex} className="flex items-center gap-3 p-3 bg-surface-alt rounded-xl">
+                    <img
+                      src={actData.image || 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=200'}
+                      alt={actData.title || actData.name}
+                      className="w-10 h-10 rounded-lg object-cover"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-dark text-sm truncate">{actData.title || actData.name}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <input
+                          type="date"
+                          value={act.date}
+                          onChange={(e) => onUpdateActivity(actIndex, 'date', e.target.value)}
+                          className="text-xs bg-white border border-dark-lighter/20 rounded px-2 py-1"
+                        />
+                        <input
+                          type="time"
+                          value={act.time}
+                          onChange={(e) => onUpdateActivity(actIndex, 'time', e.target.value)}
+                          className="text-xs bg-white border border-dark-lighter/20 rounded px-2 py-1"
+                        />
+                      </div>
                     </div>
+                    <div className="text-right">
+                      <p className="text-sm font-medium text-dark">${actData.cost || 0}</p>
+                    </div>
+                    <button
+                      onClick={() => onRemoveActivity(actIndex)}
+                      className="p-2 rounded-lg hover:bg-red-50 text-red-500"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-medium text-dark">${act.activity.cost}</p>
-                  </div>
-                  <button
-                    onClick={() => onRemoveActivity(actIndex)}
-                    className="p-2 rounded-lg hover:bg-red-50 text-red-500"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <p className="text-sm text-dark-lighter/50 mb-4">No activities added yet</p>
@@ -481,7 +540,8 @@ const AddStopModal = ({ cities, existingStops, onAdd, onClose }) => {
   });
   const [error, setError] = useState('');
 
-  const availableCities = cities.filter(c => !existingStops.find(s => s.cityId === c.id));
+  const existingIds = existingStops.map(s => s.cityId || s._id);
+  const availableCities = cities.filter(c => !existingIds.includes(c._id));
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -520,11 +580,11 @@ const AddStopModal = ({ cities, existingStops, onAdd, onClose }) => {
             <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
               {availableCities.map(city => (
                 <button
-                  key={city.id}
+                  key={city._id}
                   type="button"
-                  onClick={() => setFormData(prev => ({ ...prev, cityId: city.id }))}
+                  onClick={() => setFormData(prev => ({ ...prev, cityId: city._id }))}
                   className={`p-2 rounded-xl text-left transition-all ${
-                    formData.cityId === city.id
+                    formData.cityId === city._id
                       ? 'bg-primary/10 border-primary border-2'
                       : 'bg-surface-alt hover:bg-dark-lighter/10'
                   }`}
@@ -573,11 +633,16 @@ const AddStopModal = ({ cities, existingStops, onAdd, onClose }) => {
 // Activity Picker Modal
 const ActivityPickerModal = ({ activities, onSelect, onClose }) => {
   const [search, setSearch] = useState('');
+  const [selectedCity, setSelectedCity] = useState('all');
 
-  const filteredActivities = activities.filter(act =>
-    act.name.toLowerCase().includes(search.toLowerCase()) ||
-    act.city.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredActivities = activities.filter(act => {
+    const matchesSearch = (act.title || act.name || '').toLowerCase().includes(search.toLowerCase()) ||
+      (act.city?.name || '').toLowerCase().includes(search.toLowerCase());
+    const matchesCity = selectedCity === 'all' || act.city?._id === selectedCity;
+    return matchesSearch && matchesCity;
+  });
+
+  const uniqueCities = [...new Set(activities.map(a => a.city).filter(Boolean))];
 
   return (
     <div className="fixed inset-0 bg-dark/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -589,7 +654,7 @@ const ActivityPickerModal = ({ activities, onSelect, onClose }) => {
           </button>
         </div>
 
-        <div className="p-4 border-b border-dark-lighter/10">
+        <div className="p-4 border-b border-dark-lighter/10 space-y-3">
           <div className="relative">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-lighter/40" />
             <input
@@ -600,23 +665,33 @@ const ActivityPickerModal = ({ activities, onSelect, onClose }) => {
               className="input-field pl-12"
             />
           </div>
+          <select
+            value={selectedCity}
+            onChange={(e) => setSelectedCity(e.target.value)}
+            className="input-field"
+          >
+            <option value="all">All Cities</option>
+            {uniqueCities.map(city => (
+              <option key={city._id} value={city._id}>{city.name}</option>
+            ))}
+          </select>
         </div>
 
         <div className="p-4 overflow-y-auto flex-1">
           <div className="grid grid-cols-2 gap-3">
             {filteredActivities.map(act => (
               <button
-                key={act.id}
+                key={act._id}
                 onClick={() => onSelect(act)}
                 className="flex items-center gap-3 p-3 rounded-xl hover:bg-surface-alt transition-colors text-left"
               >
-                <img src={act.image} alt={act.name} className="w-14 h-14 rounded-lg object-cover" />
+                <img src={act.image || 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=200'} alt={act.title || act.name} className="w-14 h-14 rounded-lg object-cover" />
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-dark text-sm truncate">{act.name}</p>
-                  <p className="text-xs text-dark-lighter/60">{act.city}</p>
+                  <p className="font-medium text-dark text-sm truncate">{act.title || act.name}</p>
+                  <p className="text-xs text-dark-lighter/60">{act.city?.name}</p>
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs text-dark-lighter/50">{act.duration}h</span>
-                    <span className="text-xs font-medium text-green-600">${act.cost}</span>
+                    <span className="text-xs text-dark-lighter/50">{act.duration || 1}h</span>
+                    <span className="text-xs font-medium text-green-600">${act.cost || 0}</span>
                   </div>
                 </div>
               </button>

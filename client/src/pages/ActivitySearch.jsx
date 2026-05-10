@@ -1,10 +1,14 @@
-import { useState, useMemo } from 'react';
-import { Search, Filter, X, ChevronDown, Clock, Star, MapPin, DollarSign, Calendar, Check, AlertCircle } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { Search, Filter, X, ChevronDown, Clock, Star, MapPin, DollarSign, Calendar, Check, AlertCircle, Loader2 } from 'lucide-react';
 import ActivityCard from '../components/trip/ActivityCard';
-import { mockActivities } from '../data/mockActivities';
+import { activityAPI, cityAPI } from '../services/api';
 import { tripService } from '../data/mockTripService';
 
 const ActivitySearch = () => {
+  const [activities, setActivities] = useState([]);
+  const [cities, setCities] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [costRange, setCostRange] = useState('all');
@@ -15,16 +19,37 @@ const ActivitySearch = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
 
+  // Fetch activities and cities from API
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const [activitiesRes, citiesRes] = await Promise.all([
+          activityAPI.getAll({ limit: 100 }),
+          cityAPI.getAll({ limit: 50 })
+        ]);
+        setActivities(activitiesRes.data || []);
+        setCities(citiesRes.data || []);
+      } catch (err) {
+        console.error('Error fetching data:', err);
+        setError('Failed to load activities. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
   const categories = [
     { value: 'all', label: 'All Categories' },
     { value: 'sightseeing', label: 'Sightseeing' },
-    { value: 'cultural', label: 'Cultural' },
-    { value: 'museum', label: 'Museums' },
-    { value: 'outdoor', label: 'Outdoor' },
-    { value: 'historical', label: 'Historical' },
-    { value: 'water', label: 'Water Activities' },
+    { value: 'culture', label: 'Cultural' },
     { value: 'food', label: 'Food & Drink' },
     { value: 'adventure', label: 'Adventure' },
+    { value: 'nature', label: 'Nature' },
+    { value: 'nightlife', label: 'Nightlife' },
+    { value: 'shopping', label: 'Shopping' },
   ];
 
   const costRanges = [
@@ -43,21 +68,20 @@ const ActivitySearch = () => {
     { value: '4', label: '4+ hours' },
   ];
 
-  const cities = useMemo(() => {
-    const uniqueCities = [...new Set(mockActivities.map(a => a.city))];
-    return ['all', ...uniqueCities.sort()];
-  }, []);
+  const cityOptions = useMemo(() => {
+    return [{ _id: 'all', name: 'All Cities' }, ...cities];
+  }, [cities]);
 
   const filteredActivities = useMemo(() => {
-    let result = [...mockActivities];
+    let result = [...activities];
 
     // Search filter
     if (search) {
       const lowerSearch = search.toLowerCase();
       result = result.filter(act =>
-        act.name.toLowerCase().includes(lowerSearch) ||
-        act.city.toLowerCase().includes(lowerSearch) ||
-        act.tags.some(tag => tag.toLowerCase().includes(lowerSearch))
+        act.title?.toLowerCase().includes(lowerSearch) ||
+        act.city?.name?.toLowerCase().includes(lowerSearch) ||
+        act.description?.toLowerCase().includes(lowerSearch)
       );
     }
 
@@ -86,56 +110,80 @@ const ActivitySearch = () => {
       }
     }
 
-    // City filter
+    // City filter - match by city name
     if (selectedCity !== 'all') {
-      result = result.filter(act => act.city === selectedCity);
+      const selectedCityObj = cities.find(c => c._id === selectedCity);
+      if (selectedCityObj) {
+        result = result.filter(act => act.city?._id === selectedCity || act.city?.name === selectedCityObj.name);
+      }
     }
 
     return result;
-  }, [search, selectedCategory, costRange, duration, selectedCity]);
+  }, [activities, search, selectedCategory, costRange, duration, selectedCity, cities]);
 
   const handleAddToTrip = (activity) => {
     setViewActivity(activity);
     setShowAddModal(true);
   };
 
-  const addActivityToTrip = (tripId) => {
-    const trip = tripService.getById(tripId);
-    if (trip && viewActivity) {
-      const existingActivity = trip.activities?.find(a => a.activityId === viewActivity.id);
-      if (existingActivity) {
-        setToast({ visible: true, message: `${viewActivity.name} already in this trip`, type: 'error' });
+  const addActivityToTrip = async (tripId) => {
+    try {
+      const trip = tripService.getById(tripId);
+      if (trip && viewActivity) {
+        const newActivity = {
+          activityId: viewActivity._id,
+          activity: viewActivity.title,
+          cityId: viewActivity.city?._id,
+          city: viewActivity.city?.name || viewActivity.city,
+          date: trip.startDate || new Date().toISOString().split('T')[0],
+          time: '10:00',
+          notes: ''
+        };
+        await tripService.update(tripId, {
+          activities: [...(trip.activities || []), newActivity]
+        });
+        setToast({ visible: true, message: `Added ${viewActivity.title} to trip!`, type: 'success' });
         setTimeout(() => setToast({ visible: false, message: '' }), 3000);
-        setShowAddModal(false);
-        setViewActivity(null);
-        return;
       }
-      const newActivity = {
-        activityId: viewActivity.id,
-        activity: viewActivity.name,
-        cityId: viewActivity.cityId,
-        city: viewActivity.city,
-        date: trip.startDate || new Date().toISOString().split('T')[0],
-        time: '10:00',
-        notes: ''
-      };
-      tripService.update(tripId, {
-        activities: [...(trip.activities || []), newActivity]
-      });
-      setToast({ visible: true, message: `Added ${viewActivity.name} to trip!`, type: 'success' });
+      setShowAddModal(false);
+      setViewActivity(null);
+    } catch (err) {
+      console.error('Error adding activity:', err);
+      setToast({ visible: true, message: 'Failed to add activity to trip', type: 'error' });
       setTimeout(() => setToast({ visible: false, message: '' }), 3000);
     }
-    setShowAddModal(false);
-    setViewActivity(null);
   };
 
   const activeFiltersCount = [selectedCategory !== 'all', costRange !== 'all', duration !== 'all', selectedCity !== 'all'].filter(Boolean).length;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="card p-8 text-center">
+        <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+        <p className="text-red-500 mb-4">{error}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="btn-primary"
+        >
+          Try Again
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       {/* Toast Notification */}
       {toast.visible && (
-        <div className={`fixed top-20 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg ${
+        <div className={`fixed top-20 right-4 z-[100] flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg ${
           toast.type === 'error' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'
         }`}>
           {toast.type === 'error' ? <AlertCircle className="w-5 h-5" /> : <Check className="w-5 h-5" />}
@@ -245,9 +293,8 @@ const ActivitySearch = () => {
                 onChange={(e) => setSelectedCity(e.target.value)}
                 className="input-field cursor-pointer"
               >
-                <option value="all">All Cities</option>
-                {cities.slice(1).map(city => (
-                  <option key={city} value={city}>{city}</option>
+                {cityOptions.map(city => (
+                  <option key={city._id} value={city._id}>{city.name}</option>
                 ))}
               </select>
             </div>
@@ -280,7 +327,7 @@ const ActivitySearch = () => {
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filteredActivities.map(activity => (
             <ActivityCard
-              key={activity.id}
+              key={activity._id}
               activity={activity}
               onAdd={handleAddToTrip}
               onView={setViewActivity}
@@ -302,7 +349,7 @@ const ActivitySearch = () => {
             <div className="relative h-64 overflow-hidden">
               <img
                 src={viewActivity.image}
-                alt={viewActivity.name}
+                alt={viewActivity.title}
                 className="w-full h-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-dark/70 to-transparent" />
@@ -316,7 +363,7 @@ const ActivitySearch = () => {
                 <span className="badge bg-white/20 backdrop-blur-sm text-white mb-2">
                   {viewActivity.category}
                 </span>
-                <h2 className="font-display font-bold text-2xl text-white">{viewActivity.name}</h2>
+                <h2 className="font-display font-bold text-2xl text-white">{viewActivity.title}</h2>
               </div>
             </div>
 
@@ -342,7 +389,7 @@ const ActivitySearch = () => {
                 <div className="p-3 bg-surface-alt rounded-xl text-center">
                   <MapPin className="w-5 h-5 text-primary mx-auto mb-1" />
                   <p className="text-xs text-dark-lighter/60">City</p>
-                  <p className="font-semibold text-dark">{viewActivity.city}</p>
+                  <p className="font-semibold text-dark">{viewActivity.city?.name || viewActivity.city}</p>
                 </div>
               </div>
 
@@ -351,13 +398,7 @@ const ActivitySearch = () => {
                   <Calendar className="w-4 h-4" />
                   <span className="text-sm font-medium">Recommended Time</span>
                 </div>
-                <p className="text-dark font-medium">{viewActivity.recommendedTime}</p>
-              </div>
-
-              <div className="flex flex-wrap gap-2 mb-6">
-                {viewActivity.tags.map((tag, i) => (
-                  <span key={i} className="badge bg-primary/10 text-primary">{tag}</span>
-                ))}
+                <p className="text-dark font-medium">{viewActivity.recommendedTime || 'Any time'}</p>
               </div>
 
               <button
@@ -392,13 +433,13 @@ const ActivitySearch = () => {
               <div className="flex items-center gap-3 mb-5 p-3 bg-surface-alt rounded-xl">
                 <img
                   src={viewActivity.image}
-                  alt={viewActivity.name}
+                  alt={viewActivity.title}
                   className="w-14 h-14 rounded-lg object-cover"
                 />
                 <div>
-                  <p className="font-semibold text-dark">{viewActivity.name}</p>
+                  <p className="font-semibold text-dark">{viewActivity.title}</p>
                   <p className="text-sm text-dark-lighter/60 flex items-center gap-1">
-                    <MapPin className="w-3 h-3" /> {viewActivity.city}
+                    <MapPin className="w-3 h-3" /> {viewActivity.city?.name || viewActivity.city}
                   </p>
                 </div>
               </div>
@@ -408,8 +449,8 @@ const ActivitySearch = () => {
               <div className="space-y-2 max-h-48 overflow-y-auto">
                 {tripService.getAll().map(trip => (
                   <button
-                    key={trip.id}
-                    onClick={() => addActivityToTrip(trip.id)}
+                    key={trip._id || trip.id}
+                    onClick={() => addActivityToTrip(trip._id || trip.id)}
                     className="w-full p-3 text-left rounded-xl border border-dark-lighter/10 hover:border-primary hover:bg-primary/5 transition-all group"
                   >
                     <p className="font-medium text-dark group-hover:text-primary">{trip.title}</p>

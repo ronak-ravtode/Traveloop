@@ -8,7 +8,6 @@ import { useAuth } from '../../context/AuthContext';
 const navItems = [
   { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { path: '/trips', icon: PlaneTakeoff, label: 'My Trips' },
-  { path: '/trips/create', icon: PlusCircle, label: 'Create Trip' },
   { path: '/cities', icon: MapPin, label: 'Cities' },
   { path: '/activities', icon: Activity, label: 'Activities' },
   { path: '/profile', icon: User, label: 'Profile' },
