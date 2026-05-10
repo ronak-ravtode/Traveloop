@@ -15,7 +15,7 @@
     },
     {
       "name": "traveloop-client",
-      "type": "web",
+      "type": "static",
       "env": "static",
       "repo": "https://github.com/ronak-ravtode/traveloop.git",
       "rootDir": "client",
