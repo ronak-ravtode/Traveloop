@@ -1,0 +1,29 @@
+{
+  "services": [
+    {
+      "name": "traveloop-server",
+      "type": "web",
+      "env": "node",
+      "repo": "https://github.com/yourusername/traveloop.git",
+      "rootDir": "server",
+      "buildCommand": "npm install",
+      "startCommand": "npm start",
+      "envVars": {
+        "NODE_ENV": "production",
+        "PORT": "10000"
+      }
+    },
+    {
+      "name": "traveloop-client",
+      "type": "web",
+      "env": "static",
+      "repo": "https://github.com/yourusername/traveloop.git",
+      "rootDir": "client",
+      "buildCommand": "npm install && npm run build",
+      "publishDir": "dist",
+      "envVars": {
+        "VITE_API_URL": "https://traveloop-server.onrender.com"
+      }
+    }
+  ]
+}
