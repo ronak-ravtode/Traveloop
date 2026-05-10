@@ -35,7 +35,7 @@ const TripListCard = ({ trip, onDelete }) => {
   };
 
   const handleDelete = () => {
-    if (window.confirm(`Are you sure you want to delete "${trip.title}"?`)) {
+    if (window.confirm(`Are you sure you want to delete "${trip.name || trip.title}"?`)) {
       onDelete(tripId);
     }
     setShowMenu(false);
@@ -122,7 +122,7 @@ const TripListCard = ({ trip, onDelete }) => {
         </div>
 
         <div className="absolute bottom-3 left-3 right-3">
-          <h3 className="font-display font-bold text-lg text-white leading-tight line-clamp-1">{trip.title || 'Untitled Trip'}</h3>
+          <h3 className="font-display font-bold text-lg text-white leading-tight line-clamp-1">{trip.name || trip.title || 'Untitled Trip'}</h3>
         </div>
       </div>
 

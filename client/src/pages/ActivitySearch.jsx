@@ -7,6 +7,7 @@ import { tripService } from '../data/mockTripService';
 const ActivitySearch = () => {
   const [activities, setActivities] = useState([]);
   const [cities, setCities] = useState([]);
+  const [trips, setTrips] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
@@ -19,18 +20,20 @@ const ActivitySearch = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
 
-  // Fetch activities and cities from API
+  // Fetch activities, cities, and trips from API
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
         setError(null);
-        const [activitiesRes, citiesRes] = await Promise.all([
+        const [activitiesRes, citiesRes, tripsData] = await Promise.all([
           activityAPI.getAll({ limit: 100 }),
-          cityAPI.getAll({ limit: 50 })
+          cityAPI.getAll({ limit: 50 }),
+          tripService.getAll()
         ]);
         setActivities(activitiesRes.data || []);
         setCities(citiesRes.data || []);
+        setTrips(tripsData || []);
       } catch (err) {
         console.error('Error fetching data:', err);
         setError('Failed to load activities. Please try again.');
@@ -447,13 +450,13 @@ const ActivitySearch = () => {
               <p className="text-sm text-dark-lighter mb-4">Select a trip to add this activity to:</p>
 
               <div className="space-y-2 max-h-48 overflow-y-auto">
-                {tripService.getAll().map(trip => (
+                {trips.map(trip => (
                   <button
                     key={trip._id || trip.id}
                     onClick={() => addActivityToTrip(trip._id || trip.id)}
                     className="w-full p-3 text-left rounded-xl border border-dark-lighter/10 hover:border-primary hover:bg-primary/5 transition-all group"
                   >
-                    <p className="font-medium text-dark group-hover:text-primary">{trip.title}</p>
+                    <p className="font-medium text-dark group-hover:text-primary">{trip.name || trip.title}</p>
                     <p className="text-xs text-dark-lighter/60">
                       {trip.startDate && trip.endDate
                         ? `${new Date(trip.startDate).toLocaleDateString()} - ${new Date(trip.endDate).toLocaleDateString()}`
@@ -462,7 +465,7 @@ const ActivitySearch = () => {
                   </button>
                 ))}
 
-                {tripService.getAll().length === 0 && (
+                {trips.length === 0 && (
                   <div className="text-center py-4">
                     <p className="text-dark-lighter/60 text-sm">No trips found</p>
                     <a href="/trips/create" className="text-primary text-sm hover:underline">

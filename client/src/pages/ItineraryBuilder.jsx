@@ -36,7 +36,17 @@ const ItineraryBuilder = () => {
         if (trip) {
           setTripData({
             ...trip,
-            cities: trip.stops || trip.cities || [],
+            title: trip.name || trip.title || '',
+            cities: (trip.stops || trip.cities || []).map(stop => ({
+              ...stop,
+              cityId: stop.city?._id || stop.cityId || stop._id,
+              startDate: stop.arrivalDate || stop.startDate || '',
+              endDate: stop.departureDate || stop.endDate || '',
+              activities: (stop.activities || []).map(act => ({
+                ...act,
+                activityId: act.activity?._id || act.activityId || act._id,
+              }))
+            })),
             activities: trip.activities || []
           });
         } else {
@@ -104,6 +114,18 @@ const ItineraryBuilder = () => {
     setTripData(prev => ({ ...prev, cities: newCities }));
   };
 
+  const updateStopField = (cityId, field, value) => {
+    setTripData(prev => ({
+      ...prev,
+      cities: prev.cities.map(c => {
+        if ((c.cityId || c._id) === cityId) {
+          return { ...c, [field]: value };
+        }
+        return c;
+      }),
+    }));
+  };
+
   // Add activity to a stop
   const addActivityToStop = (cityId, activity) => {
     const newActivity = {
@@ -159,9 +181,28 @@ const ItineraryBuilder = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
+      // Map frontend cities back to backend stops
+      const stops = tripData.cities.map(city => ({
+        city: city.cityId || city.city?._id,
+        cityName: city.city || city.cityName || '',
+        country: city.country || '',
+        arrivalDate: city.startDate || '',
+        departureDate: city.endDate || '',
+        notes: city.notes || '',
+        order: city.order || 0,
+        activities: (city.activities || []).map(act => ({
+          activity: act.activityId || act.activity?._id,
+          title: act.activity?.title || act.title || '',
+          category: act.activity?.category || act.category || '',
+          time: act.time || '10:00',
+          duration: act.activity?.duration || act.duration || 1,
+          cost: act.activity?.cost || act.cost || 0
+        }))
+      }));
+
       await tripService.update(tripId, {
-        stops: tripData.cities,
-        activities: tripData.activities,
+        name: tripData.title,
+        stops: stops
       });
       showToast('Changes saved successfully!');
     } catch (err) {
@@ -221,7 +262,6 @@ const ItineraryBuilder = () => {
       )}
 
       <div className="space-y-6">
-        {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <Link to={`/trips/${tripId}/itinerary`} className="btn-ghost -ml-2">
@@ -242,139 +282,45 @@ const ItineraryBuilder = () => {
           </button>
         </div>
 
-        {/* Trip Dates Banner */}
-        <div className="card p-4 bg-gradient-to-r from-primary/5 to-secondary/5 border-primary/10">
-          <div className="flex flex-wrap items-center gap-4 text-sm">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-primary" />
-              <span className="text-dark-lighter/60">Trip Dates:</span>
-              <span className="font-medium text-dark">
-                {formatDate(tripData.startDate)} - {formatDate(tripData.endDate)}
-              </span>
+        <div className="space-y-4">
+          {stops.length > 0 ? (
+            stops.map((stop, index) => (
+              <SectionCard
+                key={stop.cityId || stop._id || index}
+                sectionNumber={index + 1}
+                stop={stop}
+                index={index}
+                total={stops.length}
+                onMove={moveStop}
+                onRemove={() => removeStop(stop.cityId || stop._id)}
+                onAddActivity={() => setShowActivityPicker(stop.cityId || stop._id)}
+                onRemoveActivity={(actIndex) => removeActivity(stop.cityId || stop._id, actIndex)}
+                onUpdateActivity={(actIndex, field, value) => updateActivity(stop.cityId || stop._id, actIndex, field, value)}
+                onUpdateStop={(field, value) => updateStopField(stop.cityId || stop._id, field, value)}
+              />
+            ))
+          ) : (
+            <div className="card p-12 text-center">
+              <MapPin className="w-12 h-12 text-dark-lighter/30 mx-auto mb-3" />
+              <p className="text-dark-lighter/60 mb-4">No sections added yet</p>
+              <button
+                onClick={() => setShowAddStop(true)}
+                className="btn-secondary"
+              >
+                <Plus className="w-4 h-4" />
+                Add Your First Section
+              </button>
             </div>
-            {totalStops > 0 && (
-              <>
-                <div className="hidden md:block w-px h-6 bg-dark-lighter/20" />
-                <div className="flex items-center gap-2">
-                  <Flag className="w-5 h-5 text-secondary" />
-                  <span className="font-medium text-dark">{totalStops} stops</span>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
+          )}
 
-        <div className="grid lg:grid-cols-3 gap-6">
-          {/* Main Content - Stops */}
-          <div className="lg:col-span-2 space-y-6">
-            <div className="card">
-              <div className="p-4 border-b border-dark-lighter/10 flex items-center justify-between">
-                <h2 className="font-display font-semibold text-dark">Trip Stops</h2>
-                <button
-                  onClick={() => setShowAddStop(true)}
-                  className="btn-primary text-sm py-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Stop
-                </button>
-              </div>
-
-              <div className="p-4 space-y-4">
-                {stops.length > 0 ? (
-                  stops.map((stop, index) => (
-                    <StopCard
-                      key={stop.cityId || stop._id || index}
-                      stop={stop}
-                      index={index}
-                      total={stops.length}
-                      onMove={moveStop}
-                      onRemove={() => removeStop(stop.cityId || stop._id)}
-                      onAddActivity={() => setShowActivityPicker(stop.cityId || stop._id)}
-                      onRemoveActivity={(actIndex) => removeActivity(stop.cityId || stop._id, actIndex)}
-                      onUpdateActivity={(actIndex, field, value) => updateActivity(stop.cityId || stop._id, actIndex, field, value)}
-                    />
-                  ))
-                ) : (
-                  <div className="text-center py-12">
-                    <MapPin className="w-12 h-12 text-dark-lighter/30 mx-auto mb-3" />
-                    <p className="text-dark-lighter/60 mb-4">No stops added yet</p>
-                    <button
-                      onClick={() => setShowAddStop(true)}
-                      className="btn-secondary"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Add Your First Stop
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Right Sidebar - Summary */}
-          <div className="space-y-6">
-            <div className="card p-5 sticky top-6">
-              <h3 className="font-display font-semibold text-dark mb-4">Trip Summary</h3>
-
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-3 bg-surface-alt rounded-xl">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
-                      <Flag className="w-5 h-5 text-primary" />
-                    </div>
-                    <span className="text-dark-lighter/70">Total Stops</span>
-                  </div>
-                  <span className="font-display font-bold text-dark">{totalStops}</span>
-                </div>
-
-                <div className="flex items-center justify-between p-3 bg-surface-alt rounded-xl">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-secondary/10 rounded-xl flex items-center justify-center">
-                      <Activity className="w-5 h-5 text-secondary" />
-                    </div>
-                    <span className="text-dark-lighter/70">Total Activities</span>
-                  </div>
-                  <span className="font-display font-bold text-dark">{totalActivities}</span>
-                </div>
-
-                <div className="flex items-center justify-between p-3 bg-surface-alt rounded-xl">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center">
-                      <DollarSign className="w-5 h-5 text-green-600" />
-                    </div>
-                    <span className="text-dark-lighter/70">Est. Activities Cost</span>
-                  </div>
-                  <span className="font-display font-bold text-dark">${estimatedCost}</span>
-                </div>
-              </div>
-
-              <div className="mt-6 pt-4 border-t border-dark-lighter/10">
-                <Link
-                  to={`/trips/${tripId}/itinerary`}
-                  className="btn-secondary w-full justify-center"
-                >
-                  View Full Itinerary
-                </Link>
-              </div>
-            </div>
-
-            <div className="card p-5">
-              <h4 className="font-semibold text-dark mb-3">Quick Tips</h4>
-              <ul className="space-y-2 text-sm text-dark-lighter/60">
-                <li className="flex items-start gap-2">
-                  <span className="text-primary">•</span>
-                  Add stops in the order you'll visit them
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-primary">•</span>
-                  Assign dates to each stop for better planning
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-primary">•</span>
-                  Add activities to fill your daily itinerary
-                </li>
-              </ul>
-            </div>
+          <div className="pt-2 flex justify-center">
+            <button
+              onClick={() => setShowAddStop(true)}
+              className="btn-secondary"
+            >
+              <Plus className="w-5 h-5" />
+              Add another Section
+            </button>
           </div>
         </div>
       </div>
@@ -401,20 +347,31 @@ const ItineraryBuilder = () => {
   );
 };
 
-// Stop Card Component
-const StopCard = ({ stop, index, total, onMove, onRemove, onAddActivity, onRemoveActivity, onUpdateActivity }) => {
-  const [expanded, setExpanded] = useState(true);
+const SectionCard = ({ sectionNumber, stop, index, total, onMove, onRemove, onAddActivity, onRemoveActivity, onUpdateActivity, onUpdateStop }) => {
+  const [expanded, setExpanded] = useState(false);
 
   const stopCity = stop.cityData || stop.city || {};
-  const stopImage = stopCity.image || stop.image || 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=200';
-  const stopName = stopCity.name || stop.city || 'Unknown City';
-  const stopCountry = stopCity.country || stop.country || '';
+  const stopName = typeof stopCity === 'object' ? (stopCity.name || stop.cityName || 'Unknown City') : (stop.city || 'Unknown City');
+  const stopCountry = typeof stopCity === 'object' ? (stopCity.country || stop.country || '') : (stop.country || '');
   const stopCost = (stop.activities || []).reduce((sum, a) => sum + (a.activity?.cost || a.cost || 0), 0);
 
+  const startLabel = stop.startDate ? new Date(stop.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'xxx';
+  const endLabel = stop.endDate ? new Date(stop.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'yyy';
+  const budgetLabel = stop.budget ? `$${stop.budget}` : stopCost ? `$${stopCost}` : 'Not set';
+
   return (
-    <div className="border border-dark-lighter/10 rounded-xl overflow-hidden">
-      <div className="p-4 bg-surface-alt flex items-center gap-4">
-        <div className="flex flex-col gap-1">
+    <div className="card p-5">
+      {/* Section header row */}
+      <div className="flex items-start justify-between gap-4 mb-2">
+        <h3 className="font-display font-semibold text-dark text-base">
+          Section {sectionNumber}:
+          {(stopName && stopName !== 'Unknown City') && (
+            <span className="ml-2 text-sm font-normal text-dark-lighter/60">
+              {stopName}{stopCountry ? `, ${stopCountry}` : ''}
+            </span>
+          )}
+        </h3>
+        <div className="flex items-center gap-1">
           <button
             onClick={() => onMove(index, 'up')}
             disabled={index === 0}
@@ -429,103 +386,149 @@ const StopCard = ({ stop, index, total, onMove, onRemove, onAddActivity, onRemov
           >
             <ChevronDown className="w-4 h-4 text-dark-lighter/60" />
           </button>
-        </div>
-
-        <img
-          src={stopImage}
-          alt={stopName}
-          className="w-14 h-14 rounded-xl object-cover"
-        />
-
-        <div className="flex-1 min-w-0">
-          <h4 className="font-display font-semibold text-dark">{stopName}</h4>
-          <p className="text-sm text-dark-lighter/60">{stopCountry}</p>
-        </div>
-
-        <div className="text-right">
-          <div className="flex items-center gap-1 text-sm text-dark-lighter/70">
-            <Calendar className="w-4 h-4" />
-            <span>{stop.startDate ? new Date(stop.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Not set'}</span>
-            <span className="text-dark-lighter/40">→</span>
-            <span>{stop.endDate ? new Date(stop.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Not set'}</span>
-          </div>
-          <p className="text-xs text-dark-lighter/50 mt-1">
-            {(stop.activities || []).length} {(stop.activities || []).length === 1 ? 'activity' : 'activities'} • ${stopCost}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="btn-ghost p-2 text-sm"
-          >
-            {expanded ? 'Hide' : 'Show'} activities
-          </button>
           <button
             onClick={onRemove}
-            className="p-2 rounded-lg hover:bg-red-50 text-red-500"
+            className="p-1 rounded-lg hover:bg-red-50 text-red-500"
           >
             <Trash2 className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {expanded && (
-        <div className="p-4 border-t border-dark-lighter/10">
-          {(stop.activities || []).length > 0 ? (
-            <div className="space-y-3 mb-4">
-              {(stop.activities || []).map((act, actIndex) => {
-                const actData = act.activity || act;
-                return (
-                  <div key={actIndex} className="flex items-center gap-3 p-3 bg-surface-alt rounded-xl">
-                    <img
-                      src={actData.image || 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=200'}
-                      alt={actData.title || actData.name}
-                      className="w-10 h-10 rounded-lg object-cover"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-dark text-sm truncate">{actData.title || actData.name}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <input
-                          type="date"
-                          value={act.date}
-                          onChange={(e) => onUpdateActivity(actIndex, 'date', e.target.value)}
-                          className="text-xs bg-white border border-dark-lighter/20 rounded px-2 py-1"
-                        />
-                        <input
-                          type="time"
-                          value={act.time}
-                          onChange={(e) => onUpdateActivity(actIndex, 'time', e.target.value)}
-                          className="text-xs bg-white border border-dark-lighter/20 rounded px-2 py-1"
-                        />
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium text-dark">${actData.cost || 0}</p>
-                    </div>
-                    <button
-                      onClick={() => onRemoveActivity(actIndex)}
-                      className="p-2 rounded-lg hover:bg-red-50 text-red-500"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="text-sm text-dark-lighter/50 mb-4">No activities added yet</p>
-          )}
+      {/* Description */}
+      <p className="text-sm text-dark-lighter/60 mb-4">
+        All the necessary information about this section.<br />
+        This can be anything like travel section, hotel or any other activity
+      </p>
 
-          <button
-            onClick={onAddActivity}
-            className="w-full py-2 border-2 border-dashed border-dark-lighter/20 rounded-xl text-dark-lighter/60 hover:border-primary hover:text-primary transition-colors flex items-center justify-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            Add Activity
-          </button>
+      {/* Date Range & Budget — two side-by-side boxes */}
+      <div className="grid grid-cols-2 gap-3">
+        {/* Date Range box */}
+        <button
+          type="button"
+          onClick={() => setExpanded(prev => prev === 'dates' ? false : 'dates')}
+          className="flex items-center gap-2 px-4 py-3 rounded-xl border border-dark-lighter/20 bg-transparent hover:border-primary/50 transition-colors text-left"
+        >
+          <Calendar className="w-4 h-4 text-dark-lighter/50 shrink-0" />
+          <span className="text-sm text-dark">
+            Date Range: &nbsp;<span className="text-dark-lighter/60">{startLabel} to {endLabel}</span>
+          </span>
+        </button>
+
+        {/* Budget box */}
+        <button
+          type="button"
+          onClick={() => setExpanded(prev => prev === 'budget' ? false : 'budget')}
+          className="flex items-center justify-between px-4 py-3 rounded-xl border border-dark-lighter/20 bg-transparent hover:border-primary/50 transition-colors text-left"
+        >
+          <span className="text-sm text-dark">Budget of this section</span>
+          <span className="text-sm font-medium text-dark-lighter/60 ml-2">{budgetLabel}</span>
+        </button>
+      </div>
+
+      {/* Expandable: Date inputs */}
+      {expanded === 'dates' && (
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <DateInput
+            label="Start Date"
+            value={stop.startDate || ''}
+            onChange={(e) => onUpdateStop('startDate', e.target.value)}
+          />
+          <DateInput
+            label="End Date"
+            value={stop.endDate || ''}
+            onChange={(e) => onUpdateStop('endDate', e.target.value)}
+          />
         </div>
       )}
+
+      {/* Expandable: Budget input */}
+      {expanded === 'budget' && (
+        <div className="mt-3">
+          <div className="relative">
+            <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-lighter/40" />
+            <input
+              type="number"
+              value={stop.budget || ''}
+              onChange={(e) => onUpdateStop('budget', e.target.value)}
+              placeholder={`${stopCost || 0}`}
+              className="input-field pl-12"
+            />
+          </div>
+          <p className="text-xs text-dark-lighter/50 mt-1">Estimated activities cost: ${stopCost}</p>
+        </div>
+      )}
+
+      {/* Notes */}
+      <div className="mt-3">
+        <textarea
+          value={stop.notes || ''}
+          onChange={(e) => onUpdateStop('notes', e.target.value)}
+          placeholder="Additional notes about this section..."
+          className="input-field resize-none text-sm"
+          rows={2}
+        />
+      </div>
+
+      {/* Activities section */}
+      <div className="mt-3 pt-3 border-t border-dark-lighter/10">
+        <button
+          onClick={() => setExpanded(prev => prev === 'activities' ? false : 'activities')}
+          className="text-sm text-dark-lighter/60 hover:text-primary transition-colors flex items-center gap-1"
+        >
+          <Activity className="w-4 h-4" />
+          {(stop.activities || []).length} activit{(stop.activities || []).length === 1 ? 'y' : 'ies'}
+          <ChevronDown className={`w-4 h-4 transition-transform ${expanded === 'activities' ? 'rotate-180' : ''}`} />
+        </button>
+
+        {expanded === 'activities' && (
+          <div className="mt-3 space-y-2">
+            {(stop.activities || []).map((act, actIndex) => {
+              const actData = act.activity || act;
+              return (
+                <div key={actIndex} className="flex items-center gap-3 p-3 bg-surface-alt rounded-xl">
+                  <img
+                    src={actData.image || 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=200'}
+                    alt={actData.title || actData.name}
+                    className="w-10 h-10 rounded-lg object-cover"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-dark text-sm truncate">{actData.title || actData.name}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <input
+                        type="date"
+                        value={act.date}
+                        onChange={(e) => onUpdateActivity(actIndex, 'date', e.target.value)}
+                        className="text-xs bg-white border border-dark-lighter/20 rounded px-2 py-1"
+                      />
+                      <input
+                        type="time"
+                        value={act.time}
+                        onChange={(e) => onUpdateActivity(actIndex, 'time', e.target.value)}
+                        className="text-xs bg-white border border-dark-lighter/20 rounded px-2 py-1"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-sm font-medium text-dark">${actData.cost || 0}</p>
+                  <button
+                    onClick={() => onRemoveActivity(actIndex)}
+                    className="p-2 rounded-lg hover:bg-red-50 text-red-500"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              );
+            })}
+            <button
+              onClick={onAddActivity}
+              className="w-full py-2 border-2 border-dashed border-dark-lighter/20 rounded-xl text-dark-lighter/60 hover:border-primary hover:text-primary transition-colors flex items-center justify-center gap-2 text-sm"
+            >
+              <Plus className="w-4 h-4" />
+              Add Activity
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

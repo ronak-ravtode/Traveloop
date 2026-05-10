@@ -1,12 +1,17 @@
 import { useState } from 'react';
 import { Link, useNavigate, Navigate } from 'react-router-dom';
-import { Mail, Lock, User, Eye, EyeOff, Compass, Loader2, Check, X } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, Loader2, Check, X, Compass, User } from 'lucide-react';
 import { registerWithEmail, loginWithGoogle } from '../firebase/auth';
 import { useAuth } from '../context/AuthContext';
 
 const Signup = () => {
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [city, setCity] = useState('');
+  const [country, setCountry] = useState('');
+  const [additionalInfo, setAdditionalInfo] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -34,8 +39,12 @@ const Signup = () => {
   ];
 
   const validateForm = () => {
-    if (!name.trim()) {
-      setError('Please enter your name');
+    if (!firstName.trim()) {
+      setError('Please enter your first name');
+      return false;
+    }
+    if (!lastName.trim()) {
+      setError('Please enter your last name');
       return false;
     }
     if (!email.trim()) {
@@ -63,7 +72,8 @@ const Signup = () => {
     if (!validateForm()) return;
     setLoading(true);
     try {
-      await registerWithEmail(email, password, name);
+      const displayName = `${firstName} ${lastName}`.trim();
+      await registerWithEmail(email, password, displayName);
       navigate('/dashboard');
     } catch (err) {
       const errorCode = err.code;
@@ -96,12 +106,11 @@ const Signup = () => {
 
   return (
     <div className="min-h-screen bg-surface-alt flex">
-      {/* Left Side - Form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-6">
         <div className="w-full max-w-md">
           <div className="lg:hidden mb-8">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
+              <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
                 <Compass className="w-6 h-6 text-white" />
               </div>
               <h1 className="font-display font-bold text-2xl text-dark">Traveloop</h1>
@@ -122,16 +131,30 @@ const Signup = () => {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="relative">
-                <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-lighter/40" />
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Full name"
-                  className="input-field pl-12"
-                  required
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="relative">
+                  <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-lighter/40" />
+                  <input
+                    type="text"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    placeholder="First name"
+                    className="input-field pl-12"
+                    required
+                  />
+                </div>
+
+                <div className="relative">
+                  <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-lighter/40" />
+                  <input
+                    type="text"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    placeholder="Last name"
+                    className="input-field pl-12"
+                    required
+                  />
+                </div>
               </div>
 
               <div className="relative">
@@ -146,13 +169,39 @@ const Signup = () => {
                 />
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="Phone number"
+                  className="input-field"
+                />
+
+                <input
+                  type="text"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  placeholder="City"
+                  className="input-field"
+                />
+              </div>
+
+              <input
+                type="text"
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+                placeholder="Country"
+                className="input-field"
+              />
+
               <div className="relative">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-lighter/40" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Password (min 6 characters)"
+                  placeholder="Password"
                   className="input-field pl-12 pr-12"
                   required
                   minLength={6}
@@ -165,6 +214,32 @@ const Signup = () => {
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
+
+              <div className="relative">
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-lighter/40" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm password"
+                  className={`input-field pl-12 ${
+                    confirmPassword && password !== confirmPassword
+                      ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20'
+                      : ''
+                  }`}
+                  required
+                />
+              </div>
+              {confirmPassword && password !== confirmPassword && (
+                <p className="text-xs text-red-500 -mt-2">Passwords do not match</p>
+              )}
+
+              <textarea
+                value={additionalInfo}
+                onChange={(e) => setAdditionalInfo(e.target.value)}
+                placeholder="Additional information"
+                className="input-field min-h-[110px] resize-none"
+              />
 
               {password && (
                 <div className="space-y-2">
@@ -189,25 +264,6 @@ const Signup = () => {
                     ))}
                   </div>
                 </div>
-              )}
-
-              <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-lighter/40" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Confirm password"
-                  className={`input-field pl-12 ${
-                    confirmPassword && password !== confirmPassword
-                      ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20'
-                      : ''
-                  }`}
-                  required
-                />
-              </div>
-              {confirmPassword && password !== confirmPassword && (
-                <p className="text-xs text-red-500 -mt-2">Passwords do not match</p>
               )}
 
               <button type="submit" disabled={loading} className="btn-primary w-full py-3">
@@ -242,9 +298,7 @@ const Signup = () => {
         </div>
       </div>
 
-      {/* Right Side - Travel Branding */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-secondary via-secondary-dark to-primary p-12 flex-col justify-between relative overflow-hidden">
-        {/* Decorative elements */}
+      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary via-primary-dark to-secondary p-12 flex-col justify-between relative overflow-hidden">
         <div className="absolute -top-20 -right-20 w-64 h-64 bg-white/10 rounded-full"></div>
         <div className="absolute -bottom-32 -left-32 w-96 h-96 bg-white/5 rounded-full"></div>
 
@@ -262,31 +316,24 @@ const Signup = () => {
 
         <div className="space-y-8 relative">
           <h2 className="text-4xl font-display font-bold text-white leading-tight">
-            Join thousands of<br />travel enthusiasts.
+            Your next adventure<br />starts here.
           </h2>
           <p className="text-lg text-white/70 max-w-md">
-            Create trips, discover cities, track budgets, and share your adventures with friends.
+            Plan trips, build itineraries, track budgets, and share your journeys with the world.
           </p>
 
-          {/* Features list */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-3 text-white/80">
-              <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
-                <span className="text-lg">📍</span>
-              </div>
-              <span>Plan your perfect itinerary</span>
+          <div className="flex gap-4">
+            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 w-40">
+              <div className="text-3xl mb-2">🌍</div>
+              <p className="text-white font-medium text-sm">50+ Countries</p>
             </div>
-            <div className="flex items-center gap-3 text-white/80">
-              <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
-                <span className="text-lg">💰</span>
-              </div>
-              <span>Track budgets effortlessly</span>
+            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 w-40">
+              <div className="text-3xl mb-2">✈️</div>
+              <p className="text-white font-medium text-sm">1000+ Trips</p>
             </div>
-            <div className="flex items-center gap-3 text-white/80">
-              <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
-                <span className="text-lg">🤝</span>
-              </div>
-              <span>Share with friends & family</span>
+            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 w-40">
+              <div className="text-3xl mb-2">👥</div>
+              <p className="text-white font-medium text-sm">5K+ Users</p>
             </div>
           </div>
         </div>

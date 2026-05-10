@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Menu, Bell, Search, Plus, LogOut, User, Settings, X,
-  Calendar, DollarSign, MapPin, MessageSquare
+  Calendar, DollarSign, MapPin, MessageSquare, Compass
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -51,6 +51,16 @@ const Navbar = ({ onMenuClick }) => {
           >
             <Menu className="w-5 h-5" />
           </button>
+
+          <Link to="/dashboard" className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-teal-500 to-amber-500 flex items-center justify-center shadow-lg shadow-teal-500/20">
+              <Compass className="w-5 h-5 text-white" />
+            </div>
+            <div className="hidden sm:block">
+              <h1 className="font-bold text-lg text-gray-900 leading-tight">Traveloop</h1>
+              <p className="text-[10px] text-gray-400 uppercase tracking-wider">Plan your journey</p>
+            </div>
+          </Link>
 
           {/* Search Bar */}
           <div className="hidden md:flex items-center gap-2 px-4 py-2.5 bg-gray-50 rounded-2xl border border-gray-100 w-72">

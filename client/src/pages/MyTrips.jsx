@@ -45,7 +45,8 @@ const MyTrips = () => {
   // Filter trips based on search and status
   const filteredTrips = trips.filter(trip => {
     const matchesFilter = filter === 'all' || trip.status === filter;
-    const matchesSearch = trip.title?.toLowerCase().includes(search.toLowerCase()) ||
+    const tripTitle = trip.name || trip.title || '';
+    const matchesSearch = tripTitle.toLowerCase().includes(search.toLowerCase()) ||
       trip.description?.toLowerCase().includes(search.toLowerCase());
     return matchesFilter && matchesSearch;
   });

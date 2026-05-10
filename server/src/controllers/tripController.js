@@ -75,7 +75,7 @@ export const updateTrip = asyncHandler(async (req, res, next) => {
     return next(new AppError('Access denied', 403));
   }
 
-  const allowedUpdates = ['name', 'description', 'coverImage', 'startDate', 'endDate', 'status', 'visibility', 'budgetLimit'];
+  const allowedUpdates = ['name', 'description', 'coverImage', 'startDate', 'endDate', 'status', 'visibility', 'budgetLimit', 'stops', 'notes'];
   allowedUpdates.forEach(field => {
     if (req.body[field] !== undefined) {
       trip[field] = req.body[field];

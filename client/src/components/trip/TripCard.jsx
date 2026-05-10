@@ -42,7 +42,7 @@ const TripCard = ({ trip }) => {
           </Badge>
         </div>
         <div className="absolute bottom-3 left-3 right-3">
-          <h3 className="font-display font-bold text-lg text-white leading-tight line-clamp-1">{trip.title || 'Untitled Trip'}</h3>
+          <h3 className="font-display font-bold text-lg text-white leading-tight line-clamp-1">{trip.name || trip.title || 'Untitled Trip'}</h3>
         </div>
       </div>
 

@@ -32,7 +32,18 @@ const ItineraryView = () => {
         setError(null);
         const data = await tripService.getById(tripId);
         if (data) {
-          setTrip(data);
+          // Normalize trip data
+          const normalizedTrip = {
+            ...data,
+            title: data.name || data.title || 'Untitled Trip',
+            stops: (data.stops || data.cities || []).map(stop => ({
+              ...stop,
+              name: stop.cityName || stop.city?.name || stop.name || stop.city || '',
+              startDate: stop.arrivalDate || stop.startDate || '',
+              endDate: stop.departureDate || stop.endDate || '',
+            }))
+          };
+          setTrip(normalizedTrip);
         } else {
           navigate('/trips');
         }
@@ -76,17 +87,31 @@ const ItineraryView = () => {
   // Get all activities organized by day
   const getTimelineData = () => {
     if (!trip) return [];
-    const activities = trip.activities || [];
-    const stops = trip.stops || trip.cities || [];
+    
+    // Flatten activities from all stops
+    const stops = trip.stops || [];
+    const allActivities = [];
+    
+    stops.forEach(stop => {
+      (stop.activities || []).forEach(act => {
+        allActivities.push({
+          ...act,
+          // Use stop dates if activity date is missing
+          date: act.date || stop.startDate || stop.arrivalDate,
+          city: stop
+        });
+      });
+    });
+
     const days = {};
-    activities.forEach(act => {
+    allActivities.forEach(act => {
+      if (!act.date) return;
       if (!days[act.date]) {
-        const cityId = act.cityId || act.city?._id;
-        const city = stops.find(s => s.cityId === cityId || s._id === cityId);
-        days[act.date] = { date: act.date, city, activities: [] };
+        days[act.date] = { date: act.date, city: act.city, activities: [] };
       }
       days[act.date].activities.push(act);
     });
+    
     return Object.entries(days).sort(([a], [b]) => new Date(a) - new Date(b)).map(([date, data]) => ({
       dayNum: trip.startDate ? Math.ceil((new Date(date) - new Date(trip.startDate)) / (1000 * 60 * 60 * 24)) + 1 : 1,
       ...data,
@@ -96,19 +121,14 @@ const ItineraryView = () => {
   // Get activities grouped by city
   const getCityGroupData = () => {
     if (!trip) return [];
-    const stops = trip.stops || trip.cities || [];
+    const stops = trip.stops || [];
     return stops.map(cityStop => {
-      const cityId = cityStop.cityId || cityStop._id;
-      const activities = (trip.activities || []).filter(act => {
-        const actCityId = act.cityId || act.city?._id;
-        return actCityId === cityId;
-      });
       return {
         city: cityStop,
-        cityName: cityStop.city || cityStop.name,
+        cityName: cityStop.name || cityStop.cityName || cityStop.city?.name || 'Unknown City',
         cityCountry: cityStop.country,
         dates: `${formatDate(cityStop.startDate)} - ${formatDate(cityStop.endDate)}`,
-        activities,
+        activities: cityStop.activities || [],
       };
     });
   };

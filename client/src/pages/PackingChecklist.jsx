@@ -164,7 +164,7 @@ const PackingChecklistPage = () => {
         </Link>
         <div>
           <h1 className="text-2xl font-display font-bold text-dark">Packing Checklist</h1>
-          <p className="text-dark-lighter/60">{trip.title}</p>
+          <p className="text-dark-lighter/60">{trip.name || trip.title}</p>
         </div>
       </div>
 

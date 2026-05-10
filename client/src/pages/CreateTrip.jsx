@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, DollarSign, Image, Globe, Lock, ArrowLeft, CheckCircle, Sparkles, Loader2, AlertCircle, Upload, X } from 'lucide-react';
+import { DollarSign, Globe, Lock, ArrowLeft, CheckCircle, Sparkles, Loader2, AlertCircle, Upload, X } from 'lucide-react';
 import { FormInput, FormTextarea, DateInput } from '../components/forms';
 import { tripService } from '../data/mockTripService';
 import { uploadAPI } from '../services/api';
@@ -160,21 +160,6 @@ const CreateTrip = () => {
     }
   };
 
-  const formatDate = (date) => {
-    if (!date) return 'Select date';
-    return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  };
-
-  const calculateDuration = () => {
-    if (!formData.startDate || !formData.endDate) return null;
-    const start = new Date(formData.startDate);
-    const end = new Date(formData.endDate);
-    const diff = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
-    return diff >= 0 ? diff : null;
-  };
-
-  const duration = calculateDuration();
-
   const isUploading = uploading || loading;
 
   return (
@@ -200,235 +185,176 @@ const CreateTrip = () => {
           <p className="text-dark-lighter/60 mt-1">Plan your next adventure</p>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-8">
-          {/* Main Form */}
-          <div className="lg:col-span-2">
-            <form onSubmit={handleSubmit} className="card p-6 md:p-8 space-y-6">
-              <div className="flex items-center gap-3 pb-4 border-b border-dark-lighter/10">
-                <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
-                  <Sparkles className="w-5 h-5 text-primary" />
-                </div>
-                <div>
-                  <h2 className="font-display font-semibold text-dark">Trip Details</h2>
-                  <p className="text-sm text-dark-lighter/60">Fill in your trip information</p>
-                </div>
+        <div className="space-y-8">
+          <form onSubmit={handleSubmit} className="card p-6 md:p-8 space-y-6">
+            <div className="flex items-center gap-3 pb-4 border-b border-dark-lighter/10">
+              <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
+                <Sparkles className="w-5 h-5 text-primary" />
               </div>
+              <div>
+                <h2 className="font-display font-semibold text-dark">Plan a new trip</h2>
+                <p className="text-sm text-dark-lighter/60">Fill in your trip information</p>
+              </div>
+            </div>
 
-              <FormInput
-                label="Trip Name"
-                name="title"
-                placeholder="Summer European Adventure"
-                value={formData.title}
+            <FormInput
+              label="Trip Name"
+              name="title"
+              placeholder="Summer European Adventure"
+              value={formData.title}
+              onChange={handleChange}
+              error={errors.title}
+              required
+            />
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <DateInput
+                label="Start Date"
+                name="startDate"
+                value={formData.startDate}
                 onChange={handleChange}
-                error={errors.title}
+                error={errors.startDate}
                 required
               />
-
-              <div className="grid md:grid-cols-2 gap-4">
-                <DateInput
-                  label="Start Date"
-                  name="startDate"
-                  value={formData.startDate}
-                  onChange={handleChange}
-                  error={errors.startDate}
-                  required
-                />
-                <DateInput
-                  label="End Date"
-                  name="endDate"
-                  value={formData.endDate}
-                  onChange={handleChange}
-                  error={errors.endDate}
-                  required
-                />
-              </div>
-
-              <FormTextarea
-                label="Description"
-                name="description"
-                placeholder="What's this trip about? Share your travel plans, goals, or excitement..."
-                value={formData.description}
+              <DateInput
+                label="End Date"
+                name="endDate"
+                value={formData.endDate}
                 onChange={handleChange}
-                rows={4}
+                error={errors.endDate}
+                required
               />
+            </div>
 
-              {/* Cover Image Upload */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-dark">Cover Photo</label>
-                {!imagePreview ? (
-                  <div className="border-2 border-dashed border-dark-lighter/20 rounded-xl p-6 text-center hover:border-primary hover:bg-primary/5 transition-colors">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFileChange}
-                      className="hidden"
-                      id="cover-image-upload"
-                    />
-                    <label htmlFor="cover-image-upload" className="cursor-pointer">
-                      <div className="flex flex-col items-center gap-2">
-                        <Upload className="w-8 h-8 text-dark-lighter/40" />
-                        <p className="text-sm text-dark-lighter/60">
-                          Click to upload cover image
-                        </p>
-                        <p className="text-xs text-dark-lighter/40">
-                          PNG, JPG up to 5MB {!isAuthenticated && '(login to upload)'}
-                        </p>
-                      </div>
-                    </label>
-                  </div>
-                ) : (
-                  <div className="relative rounded-xl overflow-hidden">
-                    <img
-                      src={imagePreview}
-                      alt="Cover preview"
-                      className="w-full h-48 object-cover"
-                    />
-                    <button
-                      type="button"
-                      onClick={removeImage}
-                      className="absolute top-2 right-2 w-8 h-8 bg-red-500 rounded-full flex items-center justify-center text-white hover:bg-red-600 transition-colors"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                    {uploading && (
-                      <div className="absolute inset-0 bg-dark/50 flex items-center justify-center">
-                        <Loader2 className="w-8 h-8 text-white animate-spin" />
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+            <FormTextarea
+              label="Description"
+              name="description"
+              placeholder="What's this trip about? Share your travel plans, goals, or excitement..."
+              value={formData.description}
+              onChange={handleChange}
+              rows={4}
+            />
 
-              <FormInput
-                label="Estimated Budget"
-                name="budget"
-                type="number"
-                placeholder="2000"
-                value={formData.budget}
-                onChange={handleChange}
-                icon={DollarSign}
-              />
-
-              {/* Visibility Toggle */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-dark">Trip Visibility</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setFormData(prev => ({ ...prev, isPublic: false }))}
-                    className={`p-4 rounded-xl border-2 transition-all flex items-center gap-3 ${
-                      !formData.isPublic
-                        ? 'border-primary bg-primary/5'
-                        : 'border-dark-lighter/20 hover:border-dark-lighter/40'
-                    }`}
-                  >
-                    <Lock className={`w-5 h-5 ${!formData.isPublic ? 'text-primary' : 'text-dark-lighter/40'}`} />
-                    <div className="text-left">
-                      <p className="font-medium text-dark">Private</p>
-                      <p className="text-xs text-dark-lighter/60">Only you can see</p>
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormData(prev => ({ ...prev, isPublic: true }))}
-                    className={`p-4 rounded-xl border-2 transition-all flex items-center gap-3 ${
-                      formData.isPublic
-                        ? 'border-primary bg-primary/5'
-                        : 'border-dark-lighter/20 hover:border-dark-lighter/40'
-                    }`}
-                  >
-                    <Globe className={`w-5 h-5 ${formData.isPublic ? 'text-primary' : 'text-dark-lighter/40'}`} />
-                    <div className="text-left">
-                      <p className="font-medium text-dark">Public</p>
-                      <p className="text-xs text-dark-lighter/60">Share with others</p>
-                    </div>
-                  </button>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isUploading}
-                className="btn-primary w-full py-3.5 text-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {isUploading ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    {uploading ? 'Uploading...' : 'Creating...'}
-                  </>
-                ) : (
-                  'Create Trip'
-                )}
-              </button>
-            </form>
-          </div>
-
-          {/* Preview Card */}
-          <div className="lg:col-span-1">
-            <div className="sticky top-6">
-              <div className="card overflow-hidden">
-                <div className="relative h-48 overflow-hidden">
-                  <img
-                    src={imagePreview || formData.coverImage || 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800&h=400&fit=crop'}
-                    alt="Trip cover"
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      e.target.src = 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800&h=400&fit=crop';
-                    }}
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-dark">Cover Photo</label>
+              {!imagePreview ? (
+                <div className="border-2 border-dashed border-dark-lighter/20 rounded-xl p-6 text-center hover:border-primary hover:bg-primary/5 transition-colors">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                    className="hidden"
+                    id="cover-image-upload"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-dark/70 to-transparent" />
-                  <div className="absolute bottom-4 left-4 right-4">
-                    <span className={`badge ${formData.isPublic ? 'bg-green-500/80' : 'bg-dark-lighter/50'}`}>
-                      {formData.isPublic ? 'Public' : 'Private'}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="p-5 space-y-4">
-                  <div>
-                    <h3 className="font-display font-bold text-xl text-dark line-clamp-2">
-                      {formData.title || 'Your Trip Name'}
-                    </h3>
-                    {formData.description && (
-                      <p className="text-sm text-dark-lighter/60 mt-1 line-clamp-2">
-                        {formData.description}
+                  <label htmlFor="cover-image-upload" className="cursor-pointer">
+                    <div className="flex flex-col items-center gap-2">
+                      <Upload className="w-8 h-8 text-dark-lighter/40" />
+                      <p className="text-sm text-dark-lighter/60">
+                        Click to upload cover image
                       </p>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-4 text-sm text-dark-lighter/70">
-                    <div className="flex items-center gap-1.5">
-                      <Calendar className="w-4 h-4" />
-                      <span>{formData.startDate ? formatDate(formData.startDate) : 'Start date'}</span>
+                      <p className="text-xs text-dark-lighter/40">
+                        PNG, JPG up to 5MB {!isAuthenticated && '(login to upload)'}
+                      </p>
                     </div>
-                    {formData.startDate && formData.endDate && duration !== null && duration >= 0 && (
-                      <>
-                        <span>→</span>
-                        <span>{duration} days</span>
-                      </>
-                    )}
-                  </div>
-
-                  {formData.budget && (
-                    <div className="flex items-center gap-1.5 text-sm">
-                      <DollarSign className="w-4 h-4 text-green-600" />
-                      <span className="font-medium text-dark">${parseInt(formData.budget).toLocaleString()}</span>
-                      <span className="text-dark-lighter/60">estimated budget</span>
+                  </label>
+                </div>
+              ) : (
+                <div className="relative rounded-xl overflow-hidden">
+                  <img
+                    src={imagePreview}
+                    alt="Cover preview"
+                    className="w-full h-48 object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={removeImage}
+                    className="absolute top-2 right-2 w-8 h-8 bg-red-500 rounded-full flex items-center justify-center text-white hover:bg-red-600 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                  {uploading && (
+                    <div className="absolute inset-0 bg-dark/50 flex items-center justify-center">
+                      <Loader2 className="w-8 h-8 text-white animate-spin" />
                     </div>
                   )}
-
-                  <div className="pt-4 border-t border-dark-lighter/10">
-                    {selectedFile && !isAuthenticated && (
-                      <p className="text-xs text-amber-600 text-center mb-2">
-                        Login to save uploaded image
-                      </p>
-                    )}
-                    <p className="text-xs text-dark-lighter/50 text-center">
-                      Preview updates as you type
-                    </p>
-                  </div>
                 </div>
+              )}
+            </div>
+
+            <FormInput
+              label="Estimated Budget"
+              name="budget"
+              type="number"
+              placeholder="2000"
+              value={formData.budget}
+              onChange={handleChange}
+              icon={DollarSign}
+            />
+
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-dark">Trip Visibility</label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, isPublic: false }))}
+                  className={`p-4 rounded-xl border-2 transition-all flex items-center gap-3 ${
+                    !formData.isPublic
+                      ? 'border-primary bg-primary/5'
+                      : 'border-dark-lighter/20 hover:border-dark-lighter/40'
+                  }`}
+                >
+                  <Lock className={`w-5 h-5 ${!formData.isPublic ? 'text-primary' : 'text-dark-lighter/40'}`} />
+                  <div className="text-left">
+                    <p className="font-medium text-dark">Private</p>
+                    <p className="text-xs text-dark-lighter/60">Only you can see</p>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, isPublic: true }))}
+                  className={`p-4 rounded-xl border-2 transition-all flex items-center gap-3 ${
+                    formData.isPublic
+                      ? 'border-primary bg-primary/5'
+                      : 'border-dark-lighter/20 hover:border-dark-lighter/40'
+                  }`}
+                >
+                  <Globe className={`w-5 h-5 ${formData.isPublic ? 'text-primary' : 'text-dark-lighter/40'}`} />
+                  <div className="text-left">
+                    <p className="font-medium text-dark">Public</p>
+                    <p className="text-xs text-dark-lighter/60">Share with others</p>
+                  </div>
+                </button>
               </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isUploading}
+              className="btn-primary w-full py-3.5 text-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {isUploading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  {uploading ? 'Uploading...' : 'Creating...'}
+                </>
+              ) : (
+                'Create Trip'
+              )}
+            </button>
+          </form>
+
+          <div className="card p-6 md:p-8">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="section-title">Suggestion for Places to Visit/Activites to preform</h2>
+                <p className="section-subtitle mt-1">Curated ideas to help you plan faster</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+              {Array.from({ length: 6 }).map((_, idx) => (
+                <div key={idx} className="card rounded-2xl aspect-[3/4]" />
+              ))}
             </div>
           </div>
         </div>

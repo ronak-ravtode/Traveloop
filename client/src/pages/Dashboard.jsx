@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { PlaneTakeoff, Calendar, MapPin, Wallet, Plus, ArrowRight, Compass, Star, TrendingUp, Loader2 } from 'lucide-react';
+import { Plus, ArrowRight, Compass, Star, TrendingUp, Loader2, Search, ArrowUpDown, Filter } from 'lucide-react';
 import TripCard from '../components/trip/TripCard';
 import { tripService } from '../data/mockTripService';
 import { cityAPI } from '../services/api';
@@ -12,6 +12,8 @@ const Dashboard = () => {
   const [cities, setCities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState('recent');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -37,33 +39,30 @@ const Dashboard = () => {
     fetchData();
   }, []);
 
-  // Calculate stats from API data
-  const userTrips = trips; // Backend filters by user
+  const userTrips = trips;
   const upcomingTrips = userTrips.filter(t => t.status === 'upcoming' || t.status === 'planning');
-  const totalCitiesPlanned = userTrips.reduce((sum, trip) => sum + (trip.stops?.length || 0), 0);
-  // Handle both old format (budget.total) and new server format (budgetLimit)
-  const estimatedTotalBudget = userTrips.reduce((sum, trip) => sum + (trip.budgetLimit || trip.budget?.total || 0), 0);
 
-  // Get recent trips (last 3)
-  const recentTrips = userTrips.slice(0, 3);
+  const matchesSearch = (trip) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.trim().toLowerCase();
+    const title = (trip.name || trip.title || '').toLowerCase();
+    const desc = (trip.description || '').toLowerCase();
+    return title.includes(q) || desc.includes(q);
+  };
 
-  // Get recommended destinations (top 4 cities)
-  const recommendedCities = cities.slice(0, 4);
+  const sortedTrips = [...userTrips]
+    .filter(matchesSearch)
+    .sort((a, b) => {
+      if (sortBy === 'name') {
+        return (a.name || a.title || '').localeCompare(b.name || b.title || '');
+      }
+      const aDate = new Date(a.updatedAt || a.createdAt || a.startDate || 0).getTime();
+      const bDate = new Date(b.updatedAt || b.createdAt || b.startDate || 0).getTime();
+      return bDate - aDate;
+    });
 
-  // Calculate budget stats - sum up all budget category values
-  const totalSpent = userTrips.reduce((sum, trip) => {
-    const budgetObj = trip.budget || {};
-    const categorySum = Object.values(budgetObj).reduce((s, v) => s + (typeof v === 'number' ? v : 0), 0);
-    return sum + categorySum;
-  }, 0);
-  const remainingBudget = estimatedTotalBudget - totalSpent;
-
-  const stats = [
-    { label: 'Total Trips', value: userTrips.length, icon: PlaneTakeoff, color: 'text-primary', bg: 'bg-primary/10' },
-    { label: 'Upcoming Trips', value: upcomingTrips.length, icon: Calendar, color: 'text-amber-600', bg: 'bg-amber-50' },
-    { label: 'Cities Planned', value: totalCitiesPlanned, icon: MapPin, color: 'text-secondary', bg: 'bg-secondary/10' },
-    { label: 'Est. Total Budget', value: `$${estimatedTotalBudget.toLocaleString()}`, icon: Wallet, color: 'text-green-600', bg: 'bg-green-50' },
-  ];
+  const recentTrips = sortedTrips.slice(0, 3);
+  const recommendedCities = cities.slice(0, 5);
 
   const formatDate = (date) => {
     if (!date) return '';
@@ -94,67 +93,101 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-8">
-      {/* Header Section */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-display font-bold text-dark">
-            Welcome back, {user?.displayName || user?.email?.split('@')[0] || 'Traveler'}
-          </h1>
-          <p className="text-dark-lighter/60 mt-1">Ready for your next adventure?</p>
+      {/* Banner Section */}
+      <div className="card p-6 md:p-8 overflow-hidden relative">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-secondary/10 to-accent/10" />
+        <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-display font-bold text-dark">
+              Welcome back, {user?.displayName || user?.email?.split('@')[0] || 'Traveler'}
+            </h1>
+            <p className="text-dark-lighter/60 mt-1">Ready for your next adventure?</p>
+          </div>
+          <Link to="/trips/create" className="btn-primary inline-flex items-center gap-2">
+            <Plus className="w-5 h-5" />
+            Plan a trip
+          </Link>
         </div>
-        <Link to="/trips/create" className="btn-primary inline-flex items-center gap-2">
-          <Plus className="w-5 h-5" />
-          Plan New Trip
-        </Link>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map(({ label, value, icon: Icon, color, bg }) => (
-          <div key={label} className="card p-5 hover:shadow-md transition-shadow">
-            <div className={`w-10 h-10 ${bg} rounded-xl flex items-center justify-center mb-3`}>
-              <Icon className={`w-5 h-5 ${color}`} />
-            </div>
-            <p className="text-2xl font-display font-bold text-dark">{value}</p>
-            <p className="text-sm text-dark-lighter/60">{label}</p>
+      {/* Search / Group / Filter / Sort */}
+      <div className="card p-4">
+        <div className="flex flex-col lg:flex-row gap-3 lg:items-center">
+          <div className="flex-1 relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-lighter/40" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search bar ...."
+              className="input-field pl-12"
+            />
           </div>
-        ))}
-      </div>
 
-      {/* Budget Highlight Card */}
-      <div className="card p-6 bg-gradient-to-r from-primary/5 via-secondary/5 to-accent/5 border border-primary/10">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center">
-              <Wallet className="w-6 h-6 text-primary" />
-            </div>
-            <div>
-              <h3 className="font-display font-semibold text-dark">Trip Budget Overview</h3>
-              <p className="text-sm text-dark-lighter/60">Across all your trips</p>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-6">
-            <div className="text-center">
-              <p className="text-lg font-display font-bold text-dark">${estimatedTotalBudget.toLocaleString()}</p>
-              <p className="text-xs text-dark-lighter/60">Total Budget</p>
-            </div>
-            <div className="text-center">
-              <p className="text-lg font-display font-bold text-amber-600">${totalSpent.toLocaleString()}</p>
-              <p className="text-xs text-dark-lighter/60">Spent</p>
-            </div>
-            <div className="text-center">
-              <p className="text-lg font-display font-bold text-green-600">${remainingBudget.toLocaleString()}</p>
-              <p className="text-xs text-dark-lighter/60">Remaining</p>
-            </div>
+          <div className="flex gap-2">
+            <button type="button" className="btn-secondary inline-flex items-center gap-2" disabled>
+              <Filter className="w-4 h-4" />
+              Group by
+            </button>
+            <button type="button" className="btn-secondary inline-flex items-center gap-2" disabled>
+              <Filter className="w-4 h-4" />
+              Filter
+            </button>
+            <button
+              type="button"
+              className="btn-secondary inline-flex items-center gap-2"
+              onClick={() => setSortBy(prev => (prev === 'recent' ? 'name' : 'recent'))}
+            >
+              <ArrowUpDown className="w-4 h-4" />
+              Sort by...
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Recent Trips Section */}
+      {/* Top Regional Selections */}
       <div>
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="section-title">Recent Trips</h2>
+            <h2 className="section-title">Top Regional Selections</h2>
+            <p className="section-subtitle mt-1">Popular cities for your next trip</p>
+          </div>
+          <Link to="/cities" className="btn-ghost text-sm inline-flex items-center gap-1">
+            Explore More <ArrowRight className="w-4 h-4" />
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          {recommendedCities.map(city => (
+            <Link
+              key={city._id}
+              to={`/cities?city=${city._id}`}
+              className="group relative overflow-hidden rounded-2xl aspect-[4/5] card hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
+            >
+              <img
+                src={city.image}
+                alt={city.name}
+                className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-dark/80 via-dark/20 to-transparent" />
+              <div className="absolute bottom-0 left-0 right-0 p-4">
+                <h3 className="font-display font-bold text-lg text-white">{city.name}</h3>
+                <p className="text-sm text-white/70">{city.country}</p>
+                <div className="flex items-center gap-1 mt-2">
+                  <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+                  <span className="text-sm text-white/80">Popular</span>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      {/* Previous Trips */}
+      <div>
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="section-title">Previous Trips</h2>
             <p className="section-subtitle mt-1">Your latest travel plans</p>
           </div>
           <Link to="/trips" className="btn-ghost text-sm inline-flex items-center gap-1">
@@ -181,46 +214,12 @@ const Dashboard = () => {
             </Link>
           </div>
         )}
-      </div>
 
-      {/* Recommended Destinations Section */}
-      <div>
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="section-title">Recommended Destinations</h2>
-            <p className="section-subtitle mt-1">Popular cities for your next trip</p>
-          </div>
-          <Link to="/search/cities" className="btn-ghost text-sm inline-flex items-center gap-1">
-            Explore More <ArrowRight className="w-4 h-4" />
+        <div className="mt-6 flex justify-end">
+          <Link to="/trips/create" className="btn-primary inline-flex items-center gap-2">
+            <Plus className="w-5 h-5" />
+            Plan a trip
           </Link>
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {recommendedCities.map(city => (
-            <Link
-              key={city._id}
-              to={`/search/cities?city=${city._id}`}
-              className="group relative overflow-hidden rounded-2xl aspect-[4/5] card hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
-            >
-              <img
-                src={city.image}
-                alt={city.name}
-                className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-dark/80 via-dark/20 to-transparent" />
-              <div className="absolute bottom-0 left-0 right-0 p-4">
-                <h3 className="font-display font-bold text-lg text-white">{city.name}</h3>
-                <p className="text-sm text-white/70">{city.country}</p>
-                <div className="flex items-center gap-1 mt-2">
-                  <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-                  <span className="text-sm text-white/80">Popular</span>
-                </div>
-              </div>
-              <div className="absolute top-3 right-3 w-8 h-8 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <ArrowRight className="w-4 h-4 text-white" />
-              </div>
-            </Link>
-          ))}
         </div>
       </div>
 
@@ -240,7 +239,7 @@ const Dashboard = () => {
             <Link to={`/trips/${upcomingTrips[0]._id || upcomingTrips[0].id}/itinerary`} className="flex items-center justify-between group">
               <div>
                 <h4 className="font-display font-bold text-dark group-hover:text-primary transition-colors">
-                  {upcomingTrips[0].title}
+                  {upcomingTrips[0].name || upcomingTrips[0].title}
                 </h4>
                 <p className="text-sm text-dark-lighter/60">
                   {formatDate(upcomingTrips[0].startDate)} - {formatDate(upcomingTrips[0].endDate)}

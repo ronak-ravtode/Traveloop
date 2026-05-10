@@ -65,12 +65,12 @@ const PublicItinerary = () => {
   };
 
   const handleWhatsApp = () => {
-    const text = `Check out this travel itinerary: ${trip?.title}\n${window.location.href}`;
+    const text = `Check out this travel itinerary: ${trip?.name || trip?.title}\n${window.location.href}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
   const handleTwitter = () => {
-    const text = `Check out this travel itinerary: ${trip?.title}`;
+    const text = `Check out this travel itinerary: ${trip?.name || trip?.title}`;
     window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(window.location.href)}`, '_blank');
   };
 
@@ -133,7 +133,7 @@ const PublicItinerary = () => {
         <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/40 to-transparent" />
         <div className="absolute bottom-0 left-0 right-0 p-6 md:p-8 max-w-5xl mx-auto">
           <span className="badge bg-white/20 text-white mb-3">Public Itinerary</span>
-          <h1 className="text-3xl md:text-4xl font-display font-bold text-white mb-2">{trip.title}</h1>
+          <h1 className="text-3xl md:text-4xl font-display font-bold text-white mb-2">{trip.name || trip.title}</h1>
           <p className="text-white/80">{trip.description}</p>
         </div>
       </div>
